@@ -23,8 +23,10 @@ Run:  python tools/test-ui-e2e.py      (exit 0 = all pass; skips if no browser)
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import re
+import signal
 import shutil
 import subprocess
 import sys
@@ -38,6 +40,10 @@ PREVIEW = ROOT / ".preview" / "preview.html"
 # Read from the manifest rather than restating it: a plugin-id rename should not
 # have to be chased into the tests.
 PLUGIN_ID = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))["id"]
+
+# Wall-clock ceiling for one browser run. It only has to be reached when the
+# browser is broken; a healthy run finishes in a few seconds.
+_WALL_CLOCK_LIMIT_S = 120
 SLOW = "ledger-api"      # deliberately delayed repository
 FAST = "audit-api"            # answers immediately
 
@@ -49,26 +55,85 @@ find_browser = _harness.find_browser
 class Browser:
     def __init__(self, exe: str, workdir: pathlib.Path):
         self.exe = exe
+        self.headless_shell = _harness.is_headless_shell(exe)
         self.workdir = workdir
         self.runs = 0
 
     def dom(self, query: str, budget_ms: int) -> str:
-        """Loads preview.html?<query> and returns the DOM at `budget_ms` of virtual time."""
+        """Loads preview.html?<query> and returns the DOM at `budget_ms` of virtual time.
+
+        Notes on the flags, all of which exist because of a real hang:
+
+        - chrome-headless-shell is headless by construction; only a full browser
+          needs `--headless=new`, and it is preferred precisely because the full
+          one is the balky case.
+        - `--virtual-time-budget` fast-forwards timers, it is not a wall-clock
+          wait. `--timeout` is the wall-clock bound: Chrome dumps the page when
+          it expires even if the page is still busy.
+        - The process gets its own session so the kill on timeout reaches the
+          whole tree. A full browser is known to write its output and then keep
+          the pipes open, which blocks the caller long after the DOM exists —
+          observed on a macOS runner as a 180s timeout with no output.
+        - The output is validated before it is returned. An empty string would
+          quietly satisfy assertions of the form "X is not in dom", so a browser
+          that produced nothing would look like a pass.
+        """
         self.runs += 1
         profile = self.workdir / f"p{self.runs}"
-        url = f"file:///{PREVIEW.as_posix()}?{query}"
-        proc = subprocess.run(
-            [
-                self.exe, "--headless=new", "--disable-gpu", "--no-sandbox",
-                "--hide-scrollbars", "--force-device-scale-factor=1",
-                "--window-size=1360,880",
-                f"--virtual-time-budget={budget_ms}",
-                f"--user-data-dir={profile}",
-                "--dump-dom", url,
-            ],
-            capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=180,
+        # PREVIEW.as_posix() is already absolute, so "file://" + it is the
+        # three-slash form; a fourth slash is a typo that happens to work.
+        url = f"file://{PREVIEW.as_posix()}?{query}"
+        argv = [self.exe]
+        if not self.headless_shell:
+            argv.append("--headless=new")
+        argv += [
+            "--disable-gpu", "--no-sandbox", "--hide-scrollbars",
+            "--force-device-scale-factor=1", "--window-size=1360,880",
+            f"--virtual-time-budget={budget_ms}",
+            f"--timeout={budget_ms + 15000}",
+            f"--user-data-dir={profile}",
+            "--dump-dom", url,
+        ]
+        proc = subprocess.Popen(
+            argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="ignore",
+            start_new_session=os.name != "nt",
         )
-        return proc.stdout or ""
+        try:
+            out, _ = proc.communicate(timeout=_WALL_CLOCK_LIMIT_S)
+        except subprocess.TimeoutExpired:
+            kill_tree(proc)
+            raise BrowserStalled(
+                f"the browser did not exit within {_WALL_CLOCK_LIMIT_S}s "
+                f"(?{query}) — it may be holding its output pipe open"
+            ) from None
+        dom = out or ""
+        if "<html" not in dom:
+            kill_tree(proc)
+            raise BrowserStalled(f"the browser produced no DOM (?{query})")
+        return dom
+
+
+class BrowserStalled(RuntimeError):
+    """The browser failed to render — a harness failure, not a product one."""
+
+
+def kill_tree(proc: subprocess.Popen) -> None:
+    """Kill the browser and anything it spawned.
+
+    Killing only the leader can leave helpers alive with our pipes still open,
+    which is how a "finished" browser blocks its caller forever.
+    """
+    try:
+        if os.name == "nt":
+            proc.kill()
+        else:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
 
 
 def probe_requests(dom: str) -> list[str]:
@@ -81,9 +146,16 @@ def main() -> int:
         sys.exit("preview harness missing — run: python tools/make-preview.py")
     exe = find_browser()
     if not exe:
-        print("no Chromium-based browser found (Edge/Chrome); skipping.")
-        print("  install one, or point CHROME_HEADLESS_SHELL at chrome-headless-shell:")
-        print("    CHROME_HEADLESS_SHELL=/path/to/chrome-headless-shell python3 tools/test-ui-e2e.py")
+        message = (
+            "no Chromium-based browser found, so the UI suite cannot run.\n"
+            "  install chrome-headless-shell, or point CHROME_HEADLESS_SHELL at it:\n"
+            "    CHROME_HEADLESS_SHELL=/path/to/chrome-headless-shell python3 tools/test-ui-e2e.py"
+        )
+        # Skipping here would be indistinguishable from passing, and the point of
+        # running this on three platforms is to know the UI really was exercised.
+        if os.environ.get("CI"):
+            sys.exit(message)
+        print(message + "\n  (not CI, so this is a skip)")
         return 0
     print(f"browser: {exe}")
     print(f"harness: {PREVIEW.relative_to(ROOT)}")
@@ -365,6 +437,8 @@ def main() -> int:
         check("one architecture read per tag, even after a second render",
               len(arches) == len(set(arches)), f"duplicate reads: {arches}")
 
+    except BrowserStalled as stalled:
+        sys.exit(f"UI harness failed: {stalled}")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

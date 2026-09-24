@@ -55,7 +55,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            shell_plat: linux64
+          - os: windows-latest
+            shell_plat: win64
+          - os: macos-latest
+            shell_plat: mac-arm64
     runs-on: ${{ matrix.os }}
     env:
       # Belt and braces with tools/_harness.py's force_utf8_console(): Windows
@@ -86,14 +92,38 @@ jobs:
           python tools/test-cleanup-e2e.py
           python tools/test-retag-e2e.py
 
-      # Windows runners ship Edge and macOS runners ship Chrome; only Linux needs
-      # one fetched. A missing browser makes the UI suite skip, never pass.
-      - name: Install a headless browser
-        if: runner.os == 'Linux'
+      # The same headless shell on every platform, deliberately. Falling back to
+      # the runner's own Chrome/Edge means the suite meets a different browser
+      # implementation per OS, and a full browser driven by --headless=new is the
+      # balky combination: on macOS it wrote nothing and never exited within the
+      # harness's 180s limit. chrome-headless-shell is the old headless
+      # implementation, where --dump-dom with a virtual time budget behaves.
+      - name: Install chrome-headless-shell
+        shell: bash
+        env:
+          PLAT: ${{ matrix.shell_plat }}
         run: |
-          curl -sSL -o /tmp/chs.zip https://storage.googleapis.com/chrome-for-testing-public/131.0.6778.204/linux64/chrome-headless-shell-linux64.zip
-          unzip -q /tmp/chs.zip -d /opt
-          echo "CHROME_HEADLESS_SHELL=/opt/chrome-headless-shell-linux64/chrome-headless-shell" >> "$GITHUB_ENV"
+          python - <<'PY'
+          import io, os, pathlib, urllib.request, zipfile
+
+          plat = os.environ["PLAT"]
+          version = "131.0.6778.204"
+          url = (f"https://storage.googleapis.com/chrome-for-testing-public/"
+                 f"{version}/{plat}/chrome-headless-shell-{plat}.zip")
+          archive = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(url, timeout=180).read()))
+
+          # Path handling is left to Python so the value written to GITHUB_ENV is
+          # native for the runner (a Git-Bash path on Windows would not be).
+          dest = pathlib.Path("chrome-headless-shell").resolve()
+          archive.extractall(dest)
+          exe = dest / f"chrome-headless-shell-{plat}" / (
+              "chrome-headless-shell.exe" if plat.startswith("win") else "chrome-headless-shell")
+          exe.chmod(0o755)
+
+          with open(os.environ["GITHUB_ENV"], "a") as fh:
+              fh.write(f"CHROME_HEADLESS_SHELL={exe}\n")
+          print("installed:", exe)
+          PY
 
       - name: Workbench UI suite
         run: |

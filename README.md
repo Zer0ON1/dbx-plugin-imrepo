@@ -62,7 +62,7 @@ npx dbx-plugin dev --path . --port 5190      # 本地调试宿主 → http://127
 
 四个 Sidecar 测试跑**打包产物**（`dist/` 里对应当前平台的 `.dbxp` 内的二进制），UI 测试用无头
 浏览器渲染真实 `ui/index.html`。测试是跨平台的：`tools/_harness.py` 按主机自动选包、把配置目录
-隔离到临时目录、并找一个 Chromium 系浏览器（`CHROME_HEADLESS_SHELL` 可指定；找不到就**跳过而不是假装通过**）。
+隔离到临时目录、并找一个 Chromium 系浏览器（优先 `chrome-headless-shell`，可用 `CHROME_HEADLESS_SHELL` 指定；本机找不到会跳过，**CI 里找不到则直接失败**——跳过与通过无法区分）。
 
 每个测试报出**实际执行的断言数**（`RESULT: ALL PASS (N checks)`），下面的数字可以跑一遍核对：
 

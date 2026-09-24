@@ -299,6 +299,19 @@ OCI Distribution **没有 rename 原语**，也不能按 digest 删除单个 Tag
    自己解包（Rust zip），宿主运行时里也没有任何 `xattr`/`codesign` 处理 —— 所以正常从插件中心安装不会带隔离属性。
    只有"浏览器手动下载 .dbxp 再安装"这种路径才可能引入，届时需要 `xattr -d com.apple.quarantine` 处理。
 
+### UI 测试统一用同一个无头浏览器
+
+CI 的三个 runner **都装同一个 `chrome-headless-shell`**，而不是各用系统自带的 Chrome/Edge。
+理由是一次真实的失败：macOS runner 上用完整版 Chrome + `--headless=new` 跑 `--dump-dom` + `--virtual-time-budget`，
+**进程写出输出后不退出**，把调用方阻塞到 180 秒超时（Linux 上用 headless shell 从来复现不了）。
+
+`chrome-headless-shell` 是旧的 headless 实现，`--dump-dom` 与虚拟时间预算在上面行为明确；它也是纯无头二进制，
+没有完整浏览器那套首启动/钥匙串/GPU 进程树。除此之外测试还做了三件事，都是为了"浏览器卡住时能明确失败"：
+
+- 传 `--timeout`（墙钟上限）让 Chrome 到点就 dump，而不是等页面空闲；
+- 子进程放进**独立进程组**，超时按组 SIGKILL —— 只杀父进程会留下持有管道的子进程，这正是"调用方被永久阻塞"的成因；
+- DOM 返回前校验（必须含 `<html`）。**空字符串会让 `"X" not in dom` 这类断言全部通过** —— 浏览器什么都没渲染会被当成测试通过。
+
 ### 验证到什么程度
 
 不同平台的"可用"证据强度不同，这里如实标注：

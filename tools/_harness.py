@@ -151,11 +151,16 @@ def isolated_env() -> dict:
     )
 
 
-_BROWSER_CANDIDATES = [
-    # explicit override wins, then per-platform well-known locations, then PATH.
-    # The macOS paths matter for CI: GitHub's macOS runners ship Chrome, not
-    # Edge, and an unfound browser makes the UI suite skip rather than fail.
-    os.environ.get("CHROME_HEADLESS_SHELL", ""),
+_HEADLESS_SHELL_NAMES = ("chrome-headless-shell",)
+_HEADLESS_SHELL_PATHS = [
+    r"C:\Program Files\chrome-headless-shell\chrome-headless-shell.exe",
+    "/opt/chrome-headless-shell-linux64/chrome-headless-shell",
+    "/usr/local/bin/chrome-headless-shell",
+    "/opt/homebrew/bin/chrome-headless-shell",
+]
+
+# Full browsers, used only when the headless shell is unavailable.
+_FULL_BROWSER_CANDIDATES = [
     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -165,20 +170,45 @@ _BROWSER_CANDIDATES = [
     "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
 ]
 
-_BROWSER_NAMES = ("chrome-headless-shell", "microsoft-edge", "chromium", "chromium-browser",
-                  "google-chrome", "google-chrome-stable", "chrome")
+_FULL_BROWSER_NAMES = ("microsoft-edge", "chromium", "chromium-browser",
+                       "google-chrome", "google-chrome-stable", "chrome")
 
 
 def find_browser() -> str | None:
-    """A Chromium-based browser able to run --headless --dump-dom."""
-    for path in _BROWSER_CANDIDATES:
-        if path and pathlib.Path(path).exists():
+    """A Chromium-based browser able to render the preview harness headlessly.
+
+    chrome-headless-shell is preferred and only falls back to a full browser:
+    it is the old headless implementation, where `--dump-dom` plus
+    `--virtual-time-budget` behaves. A full Chrome/Edge needs `--headless=new`,
+    the new implementation, where those same flags are unreliable — on macOS
+    runners it never exited at all (a 180s timeout, no DOM, no error).
+
+    Having every platform use the same shell also means the UI suite sees one
+    browser implementation instead of three.
+    """
+    override = os.environ.get("CHROME_HEADLESS_SHELL")
+    if override and pathlib.Path(override).exists():
+        return override
+    for name in _HEADLESS_SHELL_NAMES:
+        found = shutil.which(name)
+        if found:
+            return found
+    for path in _HEADLESS_SHELL_PATHS:
+        if pathlib.Path(path).exists():
             return path
-    for name in _BROWSER_NAMES:
+    for path in _FULL_BROWSER_CANDIDATES:
+        if pathlib.Path(path).exists():
+            return path
+    for name in _FULL_BROWSER_NAMES:
         found = shutil.which(name)
         if found:
             return found
     return None
+
+
+def is_headless_shell(browser: str) -> bool:
+    """True for chrome-headless-shell, which is headless without being asked."""
+    return "chrome-headless-shell" in pathlib.Path(browser).name
 
 
 class Reporter:
