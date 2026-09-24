@@ -9,6 +9,11 @@
 /.probe/
 /build-linux.mod
 
+# Screenshots rendered from the preview mock. They show whatever example data
+# the mock carries, which may describe a real environment — keep them out of the
+# repository (they were committed once, and had to be removed).
+/docs/screenshots/
+
 # Generated from .preview/mock.js + ui/index.html by tools/make-preview.py.
 # NOTE: .preview/mock.js itself is source — it is the mock bridge the UI tests
 # run against — so it stays tracked and must not be ignored here.

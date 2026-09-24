@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end regression test for untagged-artifact cleanup (PRD 2.4).
+"""End-to-end regression test for untagged-artifact cleanup.
 
 Runs the packaged sidecar against a fixture Harbor API and asserts the scan
 result, the deletion requests, and — most importantly — the safety rules around

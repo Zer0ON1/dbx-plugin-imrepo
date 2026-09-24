@@ -87,7 +87,7 @@
 
   IM.pendingDelete = null;
 
-  /* ---------- untagged artifact cleanup (PRD 2.4) ----------
+  /* ---------- untagged artifact cleanup ----------
    * Read-only scan → explicit list with sizes → confirmation → deletion.
    * The backend re-checks every target is still untagged right before deleting,
    * so a digest that gained a tag while the dialog was open is skipped. */
