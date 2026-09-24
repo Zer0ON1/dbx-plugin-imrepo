@@ -314,6 +314,46 @@ def main() -> int:
         check("each tag shows its arch badges",
               "arch-badge" in dom and "amd64" in dom and "arm64" in dom, "tag arch badges missing")
 
+        print("\nK) switching connection drops the previous registry's view")
+        # The host fires onContext at t=1.5s, then the driver re-opens the first
+        # project/namespace and its first repository. Nothing cached may cross over.
+        dom = browser.dom("theme=light&probe=1&mode=docker&switchconn=1", 9000)
+        check("the driver's connection switch actually fired",
+              'data-probe-switch="1"' in dom, "onContext callback missing (marker absent)")
+        reqs = probe_requests(dom)
+        at = reqs.index("ctx:switch") if "ctx:switch" in reqs else len(reqs)
+        before, after = reqs[:at], reqs[at + 1:]
+        check("the new connection is bootstrapped (registry info re-read)",
+              "registry/info" in after, f"after the switch: {after[:10]}")
+        # Same repository, same tag, twice in one session — but across two
+        # connections, so the answer must not be reused.
+        arch = [r for r in after if r.startswith("registry/arches:")]
+        check("the same tag's architectures are read again on the new connection",
+              bool(arch) and any(r in before for r in arch),
+              f"before: {before[-4:]} / after: {after[:10]}")
+        check("the workbench recovered: the re-opened repository renders",
+              "tag-chip" in dom and "2026-09-22_141718" in dom,
+              "the tag table did not come back after the switch")
+
+        dom = browser.dom("theme=light&probe=1&switchconn=1&noredrill=1", 6000)
+        check("the previous connection's content pane is emptied",
+              "连接一个镜像仓库以开始浏览" in dom, "the stale view is still on screen")
+        check("...and no artifact of the previous connection is left",
+              f"{SLOW}-1" not in dom, "an artifact from the old connection survived")
+        check("the breadcrumb is cleared", 'id="crumbs"></div>' in dom,
+              "the breadcrumb still points somewhere")
+        check("the new connection's project list is rendered",
+              "payments" in dom and "ddf" in dom, "the tree was not re-bootstrapped")
+
+        print("\nL) concurrent architecture reads are deduplicated")
+        # ?slowarches keeps the reads in flight, ?reclick renders the same table a
+        # second time while they are: one request per tag must be issued, not two.
+        dom = browser.dom("theme=light&probe=1&mode=docker&slowarches=1500&reclick=1", 9000)
+        arches = [r for r in probe_requests(dom) if r.startswith("registry/arches")]
+        check("the tag table read its architectures", len(arches) >= 3, f"requests: {arches}")
+        check("one architecture read per tag, even after a second render",
+              len(arches) == len(set(arches)), f"duplicate reads: {arches}")
+
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

@@ -17,6 +17,10 @@
  *   theme=light|dark   appearance to emulate
  *   mode=harbor|docker Harbor project tree vs plain OCI catalog
  *   modal=retag|layers|vuln|delete   open a dialog on the first table row
+ *   probe=1            mirror the RPC log into a hidden #__probe element
+ *   switchconn=1       announce a connection switch mid-session (onContext);
+ *                      noredrill=1 keeps the old view on screen to inspect it
+ *   slowarches=ms      delay registry/arches, to exercise the request dedup
  * ------------------------------------------------------------------------- */
 (function () {
   const params = new URLSearchParams(location.search);
@@ -37,6 +41,12 @@
   const threshold = params.get("threshold") || "high";
   const scannerSource = params.get("scannersource") || "harbor";
   const withRules = params.get("rules") === "1";   // cleanups carry rule decisions
+  // Delay registry/arches so a second render of the same repository lands while
+  // the first read is still in flight (exercises the in-flight dedup).
+  const slowArches = Number(params.get("slowarches") || 0);
+  // The host notifies the workbench of a connection switch through the callback
+  // registered in onContext; kept here so a driver can fire it.
+  let ctxCb = null;
 
   /* --- 1. emulate the host's inline token injection ---------------------- */
   const HOST_TOKENS = {
@@ -171,8 +181,8 @@
   /* Request log, mirrored into a hidden #__probe element so a headless test can
      assert what the workbench actually asked for (prefetch, cache hits, races). */
   const reqLog = [];
-  function recordRequest(method, repo) {
-    reqLog.push(repo ? method + ":" + repo : method);
+  /** Mirrors the log into the DOM (the headless test reads it back from there). */
+  function pushProbe() {
     if (!params.get("probe")) return;
     let probe = document.getElementById("__probe");
     if (!probe) {
@@ -182,6 +192,10 @@
       document.body.appendChild(probe);
     }
     probe.textContent = reqLog.join(",");
+  }
+  function recordRequest(method, repo) {
+    reqLog.push(repo ? method + ":" + repo : method);
+    pushProbe();
   }
 
   /* Surface uncaught errors in the DOM: a headless dump cannot read the console,
@@ -364,9 +378,13 @@
     locale: "zh-CN",
     context: { connectionId: "preview-conn", connection: { id: "preview-conn" } },
     theme: { appearance: theme, tokens: HOST_TOKENS },
-    onContext() {},
+    onContext(cb) { ctxCb = cb; },
     invoke: async (method, p) => {
-      recordRequest(method, (p && p.repository) || "");
+      // One tag's architectures are identified by repository AND tag, so the log
+      // keeps both — a repo-only entry cannot tell three tags apart.
+      recordRequest(method, method === "registry/arches"
+        ? `${(p && p.repository) || ""}@${(p && p.reference) || ""}`
+        : (p && p.repository) || "");
       // A registry without the Harbor API makes app.js fall back to plain OCI v2.
       if (method === "harbor/projects" && mode === "docker") throw new Error("404 page not found");
       if (method === "harbor/artifacts") {
@@ -427,6 +445,7 @@
           repos, truncated: false, errors: [] };
       }
       if (method === "registry/arches") {
+        if (slowArches) await new Promise((r) => setTimeout(r, slowArches));
         return { repository: (p && p.repository) || "", reference: (p && p.reference) || "",
                  arches: ["amd64", "arm64"] };
       }
@@ -472,6 +491,46 @@
       // Click a repository long after the background prefetch has finished, so a
       // second request for it would mean the cache missed.
       setTimeout(() => byText(clickRepo, "lvl2")?.click(), 4000);
+    }
+    if (params.get("switchconn")) {
+      // The host announces a switch by invoking the callback the workbench left in
+      // onContext. It fires once the first drill-down has painted, so the test can
+      // tell "the old view was dropped" apart from "it never rendered".
+      setTimeout(() => {
+        if (!ctxCb) { document.documentElement.dataset.probeSwitch = "nohandler"; return; }
+        // The marker goes in first: the workbench starts re-reading synchronously
+        // inside the callback, so everything logged after this point belongs to
+        // the new connection.
+        reqLog.push("ctx:switch");
+        pushProbe();
+        document.documentElement.dataset.probeSwitch = "1";
+        ctxCb({ connectionId: "preview-conn-2",
+                connection: { id: "preview-conn-2", name: "IMREPO-2", host: "https://harbor-dr.example.com" } });
+        if (params.get("noredrill")) return;
+        // Re-open the first project/namespace and its first repository on the new
+        // connection: the workbench must have re-bootstrapped for this to work.
+        const openProject = () => {
+          const row = document.querySelector("#tree .tree-item");
+          if (row) row.click(); else setTimeout(openProject, 100);
+        };
+        const openRepo = () => {
+          const row = document.querySelector("#tree .tree-item.lvl2");
+          if (row) row.click(); else setTimeout(openRepo, 100);
+        };
+        setTimeout(openProject, 300);
+        setTimeout(openRepo, 700);
+      }, 1500);
+    }
+    if (params.get("reclick")) {
+      // Click the same repository again while its architecture reads are still in
+      // flight (?slowarches=ms): the second render must join the pending reads
+      // instead of issuing one more request per tag.
+      const again = () => {
+        const row = document.querySelector("#tree .tree-item.lvl2");
+        if (row) row.click();
+        else setTimeout(again, 100);
+      };
+      setTimeout(again, 600);
     }
     if (params.get("projectsettings")) {
       // Open the per-folder settings dialog for the first project.
