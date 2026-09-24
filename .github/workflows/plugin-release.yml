@@ -60,6 +60,9 @@ jobs:
       - name: Colour-contrast gate
         run: python3 tools/check-contrast.py
 
+      - name: Translation gate
+        run: python3 tools/check-i18n.py
+
       - uses: actions/upload-artifact@v4
         with:
           name: packages

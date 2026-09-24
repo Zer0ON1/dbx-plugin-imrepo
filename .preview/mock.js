@@ -9,8 +9,8 @@
  *      copies into the sandbox — including the hostile --color-muted: #f5f5f5,
  *      a muted SURFACE that is unusable as text. A host-proof palette stays
  *      legible here.
- *   2. stubs window.dbxPlugin with representative data so the real app.js runs
- *      unmodified.
+ *   2. stubs window.dbxPlugin with representative data so the real workbench
+ *      scripts (ui/js/*.js) run unmodified.
  *   3. drives the UI into a state worth screenshotting.
  *
  * Supported query params:
@@ -385,7 +385,8 @@
       recordRequest(method, method === "registry/arches"
         ? `${(p && p.repository) || ""}@${(p && p.reference) || ""}`
         : (p && p.repository) || "");
-      // A registry without the Harbor API makes app.js fall back to plain OCI v2.
+      // A registry without the Harbor API makes the workbench fall back to plain
+      // OCI v2.
       if (method === "harbor/projects" && mode === "docker") throw new Error("404 page not found");
       if (method === "harbor/artifacts") {
         const name = (p && p.repository) || "";

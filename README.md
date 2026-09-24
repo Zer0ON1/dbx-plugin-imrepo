@@ -1,8 +1,41 @@
-# IMREPO — Image Registry Studio (DBX Plugin)
+# IMREPO — Image Registry Studio
+
+> 一个 DBX 插件：在一个工作台里浏览、管理和检查 OCI / Harbor 容器镜像仓库。
+
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-windows%20%7C%20linux%20%7C%20macos%20(x64%2Farm64)-informational)](#安装)
+[![Plugin API](https://img.shields.io/badge/DBX%20Host%20API-1-informational)](https://dbxio.com/cn/docs/plugin-development)
 
 一站式容器镜像仓库管理插件（Image Registry Studio）。基于 OCI 标准，深度兼容 Harbor 及主流开源/闭源镜像仓库，在 DBX 工作台内提供统一的图形化浏览、多仓库切换、镜像 Tag 管理（修改/删除）、镜像层分析与安全漏洞报告查看体验。
 
-> 对应 PRD：`dbx-plugin-imrepo.md`（见本仓库根目录）。本插件按 DBX 插件规范实现，源码目录为 `imrepo-dbx-plugin/`。
+> 对应 PRD：`dbx-plugin-imrepo.md`（见本仓库根目录）。
+
+## 安装
+
+1. 从 [Releases](https://github.com/Zer0ON1/dbx-plugin-imrepo/releases) 下载与你的平台匹配的 `.dbxp`：
+   `windows-x64` / `windows-arm64` / `linux-x64` / `linux-arm64` / `darwin-x64` / `darwin-arm64`。
+2. 在 DBX 插件中心显式开启**「允许安装未签名开发包」**（当前发布的是未签名候选包，见[发布](#发布)）。
+3. 安装后新建连接，选择仓库类型（Harbor / Docker Registry v2 / 云厂商托管 …），填写地址与认证方式。
+
+Sidecar 是**静态链接**的 Go 二进制（`CGO_ENABLED=0`），不依赖目标机的 libc，因此在老发行版上也能跑 —— 已在麒麟 V10（aarch64 / glibc 2.28 / 内核 4.19）上实测通过。
+
+## 截图
+
+| | |
+|---|---|
+| ![Harbor 项目树与 Tag 列表](docs/screenshots/harbor-artifacts.png) | ![Docker Registry v2 命名空间](docs/screenshots/v2-namespaces.png) |
+| Harbor 项目树、Tag 列表与**架构徽章**（一个架构一个圆圈） | Docker Registry v2 命名空间树（V2 没有项目对象，按仓库名首段归类） |
+| ![总览图表](docs/screenshots/overview-harbor.png) | ![镜像层解析](docs/screenshots/layers.png) |
+| 总览页签：拉取最多的项目 + 项目存储分布 | 逐层解析：Dockerfile 指令、每层大小与占比 |
+| ![无 Tag 清理](docs/screenshots/cleanup.png) | ![漏洞报告](docs/screenshots/vulnerabilities.png) |
+| 无 Tag 孤立产物清理（受规则保护的条目不可勾选） | CVE 报告与阈值判定 |
+
+| | |
+|---|---|
+| ![深色主题](docs/screenshots/dark.png) | ![项目设置](docs/screenshots/project-settings.png) |
+| 深色主题（配色由 `--im-*` 私有令牌驱动，跟随宿主主题） | 项目设置：可见性、配额、成员、保留策略、本项目扫描器 |
+
+截图由 `python3 tools/shoot-screenshots.py` 从真实 UI 生成，可随代码重新生成。
 
 ## 架构
 
@@ -33,8 +66,11 @@
 |------|------|------|
 | 连接与预设 | Harbor / Registry v2 / Docker Hub / GHCR / Aliyun ACR / Tencent TCR / AWS ECR / Azure ACR / Nexus / Artifactory / Quay 预设 | ✅ |
 | 多元认证 | Basic/密码、Harbor Robot、Bearer/PAT、云厂商 AK/SK（AWS SigV4、Aliyun HMAC-SHA1、Tencent TC3） | ✅ |
-| 仓库浏览 | Harbor 项目树 / 通用 `_catalog` 列表，模糊搜索，列表/卡片双视图 | ✅ |
+| 仓库浏览 | Harbor 项目树 / 通用 `_catalog` 列表，模糊搜索 | ✅ |
+| **V2 项目管理** | Docker Registry v2 没有项目对象，故按仓库名**首段**分组为命名空间（无斜杠的扁平仓库自成项目）：命名空间树 + 该命名空间的仓库表与统计（镜像数/总大小/仓库数/Tag 数） | ✅ |
 | 项目镜像总览 | 点击项目「文件夹」即列出**项目下所有镜像**（跨仓库聚合）：顶部统计镜像数/总大小/仓库数/Tag 数，列表按推送时间降序、每行一个 digest（**不含 Tag 列**），带 pull/镜像层/漏洞操作 | ✅ |
+| **总览页签与图表** | 侧栏「总览」tab：统计卡（项目/仓库/镜像/总空间）+ SVG 横向柱状图（Harbor：拉取最多的项目、项目存储分布；V2：命名空间存储分布）+ 最近新建/拉取最多项目的链接列表 | ✅ |
+| **架构结构展示** | 多架构镜像按平台逐个展示为**一个圆圈徽章**（`linux/amd64`、`linux/arm64`…）：Harbor 从 artifact 的 `references[].platform` 解析；V2 的 Tag 列表不带平台信息，故懒加载 `registry/arches` 回填并缓存 | ✅ |
 | Tag 管理 | Tag 列表、**重命名 Tag**（写新 Tag + 删原 Tag）、删除（OCI DELETE / Harbor 原生） | ✅ |
 | 镜像层解析 | Manifest → Index → Config Blob 逐层 Dockerfile 指令；**每层大小**（加粗数值 + 占比条 + 百分比 + 最大层高亮 + 按大小排序） | ✅ |
 | 漏洞报告 | Harbor additions/vulnerabilities（Trivy CVE 分级统计 + **按设置阈值判定**「已达/未达阈值」+ 缓存 + 刷新/触发扫描） | ✅ |
@@ -51,51 +87,98 @@
 ## 目录结构
 
 ```
-imrepo-dbx-plugin/
+dbx-plugin-imrepo/
 ├── manifest.json                 # 插件清单：connection-provider + workbench + backend
 ├── dbx-plugin.toml               # 构建配置（[backend] Go + [package].include）
+├── package.json                  # 开发依赖（插件 CLI 自带 Go SDK）与 npm scripts
 ├── assets/                       # 插件级图标（plugin.svg / connection.svg）
-├── ui/                           # 工作台 UI（沙箱 iframe）
-│   ├── index.html
-│   ├── styles.css                # 明/暗主题调色板（私有 --im-* 令牌，见下文）
-│   ├── app.js                    # 工作台逻辑 + 内联 SVG 图标（ICONS）
+├── ui/                           # 工作台 UI（沙箱 iframe，classic script + window.IMREPO）
+│   ├── index.html                # 按依赖顺序加载 js/*（不用 ES module，见下）
+│   ├── styles.css                # 明/暗主题调色板（私有 --im-* 令牌）
+│   ├── js/
+│   │   ├── state.js              # 全部共享状态（含缓存/竞态守卫的 seq）
+│   │   ├── i18n.js               # 中英文字典 + t()/applyI18n()
+│   │   ├── dom.js                # el/$/图标/loading/toast/剪贴板
+│   │   ├── format.js             # 体积/时间/digest/glob 等格式化
+│   │   ├── rpc.js                # invoke 封装 + 缓存/去重/预热/竞态守卫
+│   │   ├── settings-model.js     # 设置的默认值/草稿/校验（前端侧）
+│   │   ├── render-sidebar.js     # 侧栏项目树与总览 tab
+│   │   ├── render-content.js     # 内容区：镜像/Tag 表、项目总览、面包屑
+│   │   ├── render-modals.js      # 拉取命令 / 重命名 / 删除
+│   │   ├── render-layers.js      # 镜像层弹窗
+│   │   ├── render-vuln.js        # CVE 弹窗
+│   │   ├── render-cleanup.js     # 无 Tag 清理弹窗
+│   │   ├── render-settings.js    # 全局设置弹窗（含关于）
+│   │   ├── render-project.js     # 项目设置弹窗（成员/配额/扫描/可见性）
+│   │   ├── render-users.js       # 用户管理
+│   │   ├── render-overview.js    # 总览页签与 SVG 柱状图
+│   │   ├── render-logs.js        # 操作日志
+│   │   ├── render-create-project.js
+│   │   └── main.js               # init/bootstrap/setupUI（事件绑定）
 │   └── assets/plugin.svg
-├── tools/check-contrast.py       # 配色对比度门禁（WCAG，CI 可跑）
-├── tools/make-preview.py         # 由 ui/index.html + .preview/mock.js 生成验证台
-├── .preview/mock.js              # 验证台的 mock 桥 + 宿主令牌注入（唯一真源）
-├── .preview/preview.html         # 生成物，勿手改（不入包）
 ├── backend/                      # Go Sidecar 源码
-│   ├── main.go                   # SDK Server + RPC 分发
-│   ├── types.go                  # Connection 解析与配置读取
-│   ├── session.go                # 会话管理（按 connection.id 缓存凭证）
-│   ├── auth.go                   # Basic / Robot / Bearer 认证
-│   ├── cloud.go                  # AWS ECR / Aliyun ACR / Tencent TCR 换 Token
-│   ├── oci.go                    # OCI Registry v2 客户端（含 token-challenge 流程）
-│   └── harbor.go                 # Harbor REST API v2.0 客户端
+│   ├── main.go                   # SDK Server 入口 + 身份解析（从 manifest 读 id/version）
+│   ├── dispatch.go               # RPC 方法表 + 统一守卫（会话解析、Harbor 门禁）
+│   ├── connection.go             # 连接生命周期：解析宿主 payload、校验、会话
+│   ├── session.go                # 会话注册表（按 connection.id）
+│   ├── types.go                  # Connection 解析与配置取值
+│   ├── auth.go / cloud.go        # Basic/Robot/Bearer + AWS/Aliyun/Tencent 换 Token
+│   ├── oci.go                    # OCI Registry v2 客户端（含 token-challenge）
+│   ├── v2projects.go             # V2 命名空间视图（"项目"= 仓库名首段）
+│   ├── harbor.go                 # Harbor REST v2.0 客户端
+│   ├── registry.go / admin.go    # 项目生命周期（创建/配额/日志/总览）与管理面板聚合
+│   ├── cleanup.go                # 无 Tag 清理（扫描 + 复核后删除）
+│   ├── retag.go                  # 重命名 Tag（PUT 新 + 删旧）
+│   ├── layers.go                 # Manifest → 逐层解析
+│   ├── scanner.go / settings.go  # CVE 报告与扫描器；设置持久化与策略引擎
+│   ├── pool.go                   # 有界并发的通用助手
+│   └── credentials.go            # 每连接记住最后一次密码（宿主偶不下发 secret 时的兜底）
+├── tools/                        # 开发脚本（Python，无第三方依赖）
+│   ├── _harness.py               # 测试公共件：按平台选包/隔离配置/找浏览器/断言计数
+│   ├── build-packages.py         # 六平台打包（含 manifest 逐目标改写）
+│   ├── make-preview.py           # 由 ui/index.html + .preview/mock.js 生成验证台
+│   ├── shoot-screenshots.py      # 生成 docs/screenshots/ 的 README 截图
+│   ├── check-contrast.py         # 配色对比度门禁（WCAG AA + 令牌命名冲突）
+│   └── test-{settings,layers,cleanup,retag,ui}-e2e.py
+├── .preview/mock.js              # 验证台的 mock 桥 + 宿主令牌注入（**源文件，要提交**）
+├── .preview/preview.html         # 生成物，勿手改（不入包、不提交）
+├── docs/screenshots/             # README 用截图（由脚本生成）
 ├── .github/workflows/plugin-release.yml
+├── CHANGELOG.md
 └── README.md
 ```
 
+### 为什么前端不用 ES module
+
+工作台也通过 `file://` 打开（验证台与 UI 测试都这么加载）。Chromium 对 `file://` 下的 `type="module"` 脚本按 CORS（origin 为 null）**直接拒绝加载**——用了模块，整套 UI 测试与截图流程会静默失效。因此拆成多个 **classic script**，每个文件挂到共享的 `window.IMREPO` 命名空间上，跨模块调用一律 `IM.xxx`；所有可变的共享状态（`state`、`archCache`、`locale`、`pendingDelete` 等）也挂在命名空间上，否则每个模块会各持一份副本。
+
+`index.html` 里 `<script>` 的顺序即依赖顺序（state → i18n → dom/format → rpc → settings-model → 各 render-* → main），**`main.js` 必须最后**（它调用 `init()`）。
+
 ## 构建与打包
 
-依赖：Node.js 22+、Go 1.22+。
+依赖：Node.js 22+、Go 1.22+、Python 3（仅测试与打包脚本用）。
 
 ```bash
-# 安装 CLI
-npm install -g @dbx-app/plugin-cli
+# 安装依赖：CLI 自带与本版本匹配的 Go SDK，Sidecar 就是对着它编译的
+npm install
 
-# 打包（会编译 Go 后端，生成未签名候选包）
-cd imrepo-dbx-plugin
-dbx-plugin package .
-# → dist/com.dbx.plugin.imrepo-1.2.0-windows-x64.dbxp
-# → dist/com.dbx.plugin.imrepo-1.2.0-windows-x64.artifact.json
+# 打包六个平台（windows / linux / darwin × x64 / arm64）
+npm run package          # = python3 tools/build-packages.py
+# → dist/com.dbx.plugin.imrepo-<版本>-<target>.dbxp     × 6
+# → dist/com.dbx.plugin.imrepo-<版本>-<target>.artifact.json
+# → dist/release-candidates.json                        （dbx-store 自动更新读它）
 ```
 
-本地调试：
+**一条命令出全部平台**，因为 `CGO_ENABLED=0` 让 Sidecar 静态链接，与构建机的 libc 无关 —— 于是老系统的 glibc 也不成问题（在麒麟 V10 / glibc 2.28 / aarch64 上实测通过）。官方 CLI `dbx-plugin package .` 只出**当前平台**的包（它拒绝交叉编译），所以多平台由 `tools/build-packages.py` 负责：它按目标平台**改写 manifest 的 `entrypoints.backend.executable`**（`bin/imrepo-sidecar` → `bin/<target>/imrepo-sidecar[.exe]`）、对**实际写入的字节**做 sha256、给二进制打 0755。
+
+> 这条改写不是可选项：漏掉它，包能装、但宿主按 manifest 找不到可执行文件。而 Sidecar 的端到端测试是自己解包、自己执行二进制的，**测不出来**。所以测试里有一条专门的布局断言（见下），并且可以拿官方 CLI 的产物对比验收——两者的 `manifest.json` 应当逐字节一致。
+
+本地调试（不启动 DBX 桌面端）：
 
 ```bash
-dbx-plugin dev --path . --port 5190
+npx dbx-plugin dev --path . --port 5190
 # 打开 http://127.0.0.1:5190/
+# 调试数据在 .dbx-dev/（已 gitignore，可能含明文凭据）
 ```
 
 ### 版本号：只需改一个地方
@@ -111,42 +194,71 @@ Plugin backend identity 'com.dbx.plugin.imrepo/1.2.0' does not match manifest 'c
 因此**升版本只改 `manifest.json` 的 `version`**（同时建议把 `backend/main.go` 的 `pluginVersion` 常量作为兜底一起更新）。
 
 ```bash
-# 验证身份是否与清单一致（无需真机安装）
-printf '{"jsonrpc":"2.0","id":1,"method":"plugin/initialize","params":{"host":{"protocolVersions":[1]}}}\n' \
-  | ./bin/windows-x64/imrepo-sidecar.exe
-# → {"plugin":{"id":"com.dbx.plugin.imrepo","version":"1.2.1"}, ...}
+# 验证身份是否与清单一致（无需真机安装；从包内取二进制）
+python3 - <<'PY'
+import sys, zipfile, subprocess
+sys.path.insert(0, 'tools'); import _harness
+target = _harness.host_target()
+with zipfile.ZipFile(_harness.find_package(target)) as z:
+    exe = z.read(f"bin/{target}/{_harness.sidecar_name(target)}")
+open('/tmp/sidecar', 'wb').write(exe); __import__('os').chmod('/tmp/sidecar', 0o755)
+req = '{"jsonrpc":"2.0","id":1,"method":"plugin/initialize","params":{"host":{"protocolVersions":[1]}}}\n'
+print(subprocess.run(['/tmp/sidecar'], input=req, capture_output=True, text=True).stdout)
+PY
+# → {"id":1,"jsonrpc":"2.0","result":{"capabilities":["connections"],
+#     "plugin":{"id":"com.dbx.plugin.imrepo","version":"1.8.0"},"protocolVersion":1}}
 ```
 
 ## 测试
 
 ```bash
-# 五个端到端回归
-python tools/test-retag-e2e.py      # 重命名 Tag：跑真实 Sidecar，断言实际发出的 HTTP 请求序列
-python tools/test-layers-e2e.py     # 镜像层解析：跑真实 Sidecar，断言逐层大小/指令/总量
-python tools/test-cleanup-e2e.py    # 孤立 Artifact 清理：扫描/删除行为 + 复核安全规则
-python tools/test-settings-e2e.py   # 设置：默认值/持久化/校验/规则生效/Tag 保护/扫描器与缓存
-python tools/test-ui-e2e.py         # 界面行为：无头浏览器渲染真实 UI，断言 DOM
-
-# 配色对比度门禁
-python tools/check-contrast.py
+npm test                            # 下面全部，外加配色门禁
+npm run test:settings               # 设置：默认值/持久化/校验/规则生效/Tag 保护/扫描器与缓存
+npm run test:layers                 # 镜像层解析：跑真实 Sidecar，断言逐层大小/指令/总量
+npm run test:cleanup                # 孤立 Artifact 清理：扫描/删除行为 + 复核安全规则
+npm run test:retag                  # 重命名 Tag：断言实际发出的 HTTP 请求序列
+npm run test:ui                     # 界面行为：无头浏览器渲染真实 UI，断言 DOM
+npm run contrast                    # 配色对比度门禁（WCAG AA + 宿主令牌命名冲突）
+npm run i18n                        # 翻译门禁（用到的键必须在两种语言里都存在）
 ```
 
-- `test-retag-e2e.py` 覆盖 5 组场景（Harbor 真重命名 / 通用 v2 保留原 Tag 并给出 warning / 仅拷贝 / 非法 Tag / 相同 Tag）。它验证的是**请求序列**而不只是返回值，因为"重命名"这个功能的价值恰恰在那三步 HTTP 调用上。
+四个 Sidecar 测试都跑**打包产物**（`dist/` 里对应当前平台的 `.dbxp` 内的二进制），不是源码编译的临时件；UI 测试渲染的是由真实 `ui/index.html` 生成的验证台。所以先打包再测：
+
+```bash
+npm run package && npm test
+```
+
+**测试是跨平台的**：`tools/_harness.py` 按当前主机选目标包（`linux-x64` / `windows-x64` / `darwin-arm64` …）、把配置目录隔离到临时目录（Windows 的 `%APPDATA%` 与 POSIX 的 `$XDG_CONFIG_HOME` 一起设，两边的 `os.UserConfigDir()` 都跑不掉）、并找一个 Chromium 系浏览器（`CHROME_HEADLESS_SHELL` 可指定）。找不到浏览器时 UI 测试**跳过而不是假装通过**。
+
 每个测试都会在结束时报出**它实际执行了多少条断言**（`RESULT: ALL PASS (N checks)`），所以下面的数字可以直接跑一遍核对，不必相信文档：
 
 | 测试 | 断言数 | 验证的是 |
 |---|---|---|
-| `test-settings-e2e.py` | 72 | 设置的持久化、校验与**实际生效**（后端行为） |
-| `test-ui-e2e.py` | 48 | 界面行为与策略可见性（浏览器渲染真实 UI） |
+| `test-settings-e2e.py` | 143 | 设置的持久化、校验与**实际生效**（后端行为）、V2 命名空间与总览、包布局 |
+| `test-ui-e2e.py` | 85 | 界面行为与策略可见性（浏览器渲染真实 UI），含总览图表、架构徽章、连接切换、架构读取去重 |
 | `test-layers-e2e.py` | 23 | 逐层大小/指令/总量解析 |
 | `test-cleanup-e2e.py` | 21 | 孤立 Artifact 清理的安全规则 |
 | `test-retag-e2e.py` | 17 | 重命名 Tag 的真实请求序列 |
 | `check-contrast.py` | 全量配色对 | 配色对比度门禁 |
+| `check-i18n.py` | 275 键 × 2 语言 | 翻译门禁：用到的键必须两种语言都有；另报"定义了但没用到"的键 |
+
+### 翻译门禁（防"界面上显示键名"）
+
+`tools/check-i18n.py` 静态比对三处：`index.html` 的 `data-i18n` 属性、`ui/js/*.js` 里 `t("...")` 的调用、以及 `ui/js/i18n.js` 两份字典的键。它能抓到两类问题：
+
+- **用到的键没定义**：`t()` 找不到键时会**回退返回键名本身**，于是界面上出现字面量 `project.accessDesc` —— 看着像样式问题，不像 bug，而且只在一个弹窗的角落。这条就是这样发现的。
+- **两种语言键不对称**：漏翻会静默回退到中文。
+
+它自带一个自检：解析出的键数少于 200 就直接报错退出，而不是"通过"—— 字典结构一旦重构，解析器失效的方向是**少报**（静默通过），必须让它响亮地失败。
+
+### 包布局断言（防回归）
+
+settings 测试的 P 组会读**包内**的 `manifest.json`，断言它的 `entrypoints.backend.executable` 指向包内真实存在的文件。这条断言来自一个真实 bug：手写打包脚本曾把二进制放进 `bin/<target>/`，却让 manifest 仍写着 `bin/imrepo-sidecar` —— 装得上，起不来。整套 Sidecar 测试都测不出来（它们自己解包、自己执行二进制），所以这条断言是唯一的守卫。
 
 - `test-layers-e2e.py` 覆盖 7 组场景，重点是 **BuildKit attestation**：如果 Manifest List 里 `platform: unknown/unknown` 的 attestation 条目排在前面而被选中，拿到的"镜像"层列表是无意义的 —— 表现出来就像"逐层大小功能没做出来"。测试断言此时仍必须解析出真正的镜像（B/C 两组）。
 - `test-cleanup-e2e.py` 覆盖扫描准确性（只列出无 Tag 的 IMAGE/CHART，带 Tag 的不列）、删除与回收量、**复核安全规则**（扫描后被重新打标的 Artifact 必须跳过且不发 DELETE）、目标消失时的处理、批量上限、以及非 Harbor 仓库的明确报错。
 - `test-ui-e2e.py` 用无头浏览器渲染真实 UI 并断言 DOM，覆盖：**竞态**（点慢仓库 A 后立刻点快仓库 B，最终必须显示 B）、**加载反馈**（内容区与所点行都有转圈）、**预热与缓存**（后台果然请求了若干仓库；点击已预热的仓库只发一次请求）、**清理弹窗**（列出扫描结果、报告扫描统计、未选中时销毁性按钮必须禁用）、**设置面板**（四段齐全、脏值提示、「应用到 Harbor」两步门禁、受保护条目与阈值判定在界面上可见）。竞态那组会在测试内临时摘掉守卫自检灵敏度 —— 摘掉后必须失败。
-- `test-settings-e2e.py` 覆盖 9 组场景，重点是**设置真的改变了行为**：默认值 → 保存 → **重启进程后仍在**（证明落盘持久化）→ 按连接隔离 → 校验拒绝非法值且不写入 → 清理规则在扫描与删除两条路径上生效（**受保护的条目不计入删除且不发 DELETE**）→ 受保护 Tag 的删除/改名被拒（**且没有半写状态：不发 PUT**）→ 阈值/缓存/关闭开关 → Harbor 侧扫描器的读取与「只写差异、保留其他键」的写回 → 非 Harbor 仓库的明确报错。测试把 `APPDATA` 重定向到临时目录，从不碰用户真实配置。
+- `test-settings-e2e.py` 覆盖 9 组场景，重点是**设置真的改变了行为**：默认值 → 保存 → **重启进程后仍在**（证明落盘持久化）→ 按连接隔离 → 校验拒绝非法值且不写入 → 清理规则在扫描与删除两条路径上生效（**受保护的条目不计入删除且不发 DELETE**）→ 受保护 Tag 的删除/改名被拒（**且没有半写状态：不发 PUT**）→ 阈值/缓存/关闭开关 → Harbor 侧扫描器的读取与「只写差异、保留其他键」的写回 → 非 Harbor 仓库的明确报错。测试把配置目录重定向到临时目录，从不碰用户真实配置。
 
 ### 清理无 Tag Artifact 的安全设计
 
@@ -164,7 +276,7 @@ python tools/check-contrast.py
 
 ### 设置（工具栏「设置」按钮）
 
-设置**存储在侧车进程**，文件位于用户配置目录 `imrepo-dbx-plugin/settings.json`，按 `connectionId` 分键（同一台机器上两个仓库连接可以有不同策略）。放进后端有两个原因：沙箱 iframe 没有可靠的持久存储，而且**策略必须由后端执行** —— 只被界面记住的规则只是一个约定。
+设置**存储在侧车进程**，文件位于用户配置目录（如 `~/.config/imrepo-dbx-plugin/settings.json`），按 `connectionId` 分键（同一台机器上两个仓库连接可以有不同策略）。放进后端有两个原因：沙箱 iframe 没有可靠的持久存储，而且**策略必须由后端执行** —— 只被界面记住的规则只是一个约定。
 
 | 分组 | 字段 | 它真正改变什么 |
 |---|---|---|
@@ -184,7 +296,7 @@ python tools/check-contrast.py
 
 ### 加载与缓存策略
 
-大仓库列表要几秒，所以做了四件事，都在 `ui/app.js`：
+大仓库列表要几秒，所以做了四件事，都在 `ui/js/rpc.js` 与 `ui/js/state.js` 里：
 
 | 机制 | 作用 |
 |---|---|
@@ -221,40 +333,44 @@ DBX 宿主的 `PluginWorkbenchHost.vue → currentBridgeTheme()` 会遍历宿主
 配套约束：
 
 - 文字用 `--im-fg*`，填充按钮用 `--im-primary-solid` / `--im-danger-solid`（配 `--im-primary-fg` / `#fff`）；纯文字/图标用 `--im-primary`。深色主题下两者取值不同（浅蓝文字 vs 深蓝底），否则白字按钮或蓝字必然有一方不达标。
-- 图标一律用内联 SVG（`app.js` 的 `ICONS` + `svgIcon()`）继承 `currentColor`；`◫ / 🛡 / ✕` 这类字形在 13px 下呈细轮廓，观感发虚。
+- 图标一律用内联 SVG（`ui/js/dom.js` 的 `ICONS` + `svgIcon()`）继承 `currentColor`；`◫ / 🛡 / ✕` 这类字形在 13px 下呈细轮廓，观感发虚。
 - 作者样式里任何 `display:flex/grid` 都会覆盖 HTML `hidden` 的 UA 默认值，故 `styles.css` 顶部固定有 `[hidden] { display: none !important; }`。
 
 改动配色后必须过门禁（失败返回非 0）：
 
 ```bash
-python tools/check-contrast.py            # WCAG AA 全量校验 + 宿主令牌命名冲突检测
-python tools/check-contrast.py --verbose  # 打印每一对
+python3 tools/check-contrast.py            # WCAG AA 全量校验 + 宿主令牌命名冲突检测
+python3 tools/check-contrast.py --verbose  # 打印每一对
 ```
 
-渲染侧验证（Windows 自带 Edge 即可，无需装浏览器）：
+渲染侧验证（任何 Chromium 系浏览器即可：Edge / Chrome / chrome-headless-shell）：
 
 ```bash
-# 改了 ui/index.html 或 .preview/mock.js 之后必须重新生成（否则验证台用的是旧 DOM，
-# 会让你误判"功能没生效" —— 这个坑踩过一次）
-python tools/make-preview.py
+# 改了 ui/index.html 或 .preview/mock.js 之后必须重新生成，否则验证台跑的是旧 DOM，
+# 会让你误判"功能没生效"（这个坑踩过一次，所以 UI 测试跑前也会自己重新生成）
+python3 tools/make-preview.py
 
-# preview.html 会故意注入宿主那套 Tailwind 令牌，并 mock invoke() 数据
-msedge --headless=new --window-size=1360,880 --virtual-time-budget=5000 \
-  --screenshot=shot.png "file:///.../.preview/preview.html?theme=light&modal=retag"
-# 可用参数：
-#   theme=light|dark        mode=harbor|docker      view=cards
-#   modal=retag|layers|vuln|delete|pull|cleanup|settings
-#   ---- 设置与策略相关（用来把界面驱动到"设置已生效"的状态）----
-#   keeptagged=N protect=latest,release-*   # 保留窗口外的产物标记 / 受保护 Tag（锁图标）
-#   keepuntagged=N minage=N excluderepos=a,b  threshold=critical|high|medium|low
-#   rules=1        # 清理弹窗的条目带受保护标记与原因
-#   dirty=1        # 改一个字段，展示脏值提示
-#   armapply=1     # 打开设置并把「应用到 Harbor」点到确认态
-#   scroll=bottom  # 设置弹窗滚到底（截图扫描器/关于段）
-# 每次务必换一个 --user-data-dir，否则 Edge 静默失败、不产出文件
+# 一次生成 README 用的全部截图（写入 docs/screenshots/）
+python3 tools/shoot-screenshots.py
+python3 tools/shoot-screenshots.py --list        # 看有哪些镜头
 ```
 
+`preview.html` 会故意注入宿主那套 Tailwind 令牌，并 mock `invoke()` 数据；镜头通过 URL 参数驱动：
+
+| 参数 | 取值 | 作用 |
+|---|---|---|
+| `theme` | `light` / `dark` | 主题 |
+| `mode` | `harbor` / `docker` | 走 Harbor 项目树还是 V2 命名空间树 |
+| `modal` | `retag` / `layers` / `vuln` / `delete` / `pull` / `cleanup` / `settings` | 打开对应弹窗 |
+| `overviewtab` | `1` | 切到左侧「总览」tab（图表） |
+| `projectsettings` | `1` | 打开项目设置弹窗（可配 `armapply=1` 演示两步确认） |
+| `keepuntagged`/`minage`/`excluderepos`/`keeptagged`/`protect`/`threshold` | — | 把界面驱动到"设置已生效"的状态 |
+| `rules` | `1` | 清理弹窗的条目带受保护标记与原因 |
+| `openlogs`/`newproject` | `1` | 打开日志 / 新建项目弹窗 |
+
 `.preview/preview.html` 由 `tools/make-preview.py` 从真实的 `ui/index.html` 生成（只插入 `<base>` 与 mock 脚本），因此**不存在"验证台 DOM 与真实 UI 脱节"的风险**；要加控件只改 `ui/*`，不要手改生成物。
+
+> 无头环境缺中文字体时，截图里的中文会渲染成方块。装一份 CJK 字体（如 Noto Sans CJK），或让 `XDG_DATA_HOME` 指向一个含 `fonts/` 的目录。
 
 ## 后端 RPC 方法
 
@@ -271,6 +387,11 @@ msedge --headless=new --window-size=1360,880 --virtual-time-budget=5000 \
 | `registry/layers` | `repository`, `reference` | 逐层解析（含 Dockerfile 指令与体积） |
 | `registry/retag` | `repository`, `sourceTag`, `targetTag`, `deleteSource?` | 重命名 Tag：先 PUT 新 Tag，`deleteSource` 为真时再删原 Tag |
 | `registry/delete` | `repository`, `digest` | 按 digest 删除 |
+| `registry/namespaces` | — | **V2 的"项目"**：把 `_catalog` 的书名按首段（命名空间）分组为 `[{name, repo_count}]`，与 Harbor 项目同形；无斜杠的扁平仓库自成单仓库项目 |
+| `registry/repositories` | `namespace` | 命名空间内的仓库 `[{name 短名, full_name}]` |
+| `registry/images` | `namespace` | 命名空间总览：并发遍历 Tag→Manifest，**按 digest 去重**计镜像数与总大小 |
+| `registry/arches` | `repository`, `reference` | 该引用的架构列表（index 取全部条目的 platform；单架构 manifest 读 config blob 的 `architecture`）。V2 的 Tag 列表不带平台信息，所以架构徽章是懒加载回填的 |
+| `registry/overview` | — | V2 仓库总览：命名空间/仓库/镜像/Tag/总大小 + 各命名空间存储分布（无审计日志，故没有拉取次数） |
 | `harbor/projects` | — | Harbor 项目列表 |
 | `harbor/repositories` | `project` | 项目下仓库列表 |
 | `harbor/artifacts` | `project`, `repository` | Artifact（含 tags）列表 |
@@ -287,6 +408,12 @@ msedge --headless=new --window-size=1360,880 --virtual-time-budget=5000 \
 | `harbor/memberAdd` / `memberRole` / `memberRemove` | `project`, `roleId`/`memberId` | 项目成员的添加 / 改角色 / 移除 |
 | `harbor/retentionSave` | `project`, `projectId`, `policy` | 保存保留策略：已有策略 PUT 整体写回，没有则 POST 创建（绑定 scope） |
 | `harbor/users` / `userCreate` / `userPassword` / `userDelete` / `userAdmin` | 见代码 | Harbor 用户管理（需要管理员权限） |
+| `harbor/currentUser` | — | 当前登录用户 `{admin, user}`，任何有效登录都可读（界面据此决定用户管理面板是管理员视图还是只读本人信息） |
+| `harbor/projectCreate` | `projectName`, `public?` | 新建项目（项目名正则校验，409 = 已存在） |
+| `harbor/projectSetPublic` | `project`, `public` | 项目可见性：读取-合并-回写 `metadata.public` |
+| `harbor/quotaGet` / `quotaSet` | `project`, `limit?` | 项目存储配额（`hard.storage` 字节；`-1` = 不设限，`0` 拒绝） |
+| `harbor/logs` | `project?`, `operation?`, `page?` | 审计日志（全局或按项目，可按操作类型过滤） |
+| `harbor/overview` | `window?` | 注册库总览：项目/仓库/镜像/总空间 + 各项目存储分布 + 最近新建 + 拉取最多的项目（拉取数来自审计日志，一次统计 1/3/7 天三个窗口，40 页封顶并以 `pullTruncated` 明示） |
 
 ### 重命名 Tag 的语义
 
@@ -322,11 +449,25 @@ OCI Distribution **没有 rename 原语**，也不能按 digest 删除单个 Tag
 - 云厂商 AK/SK 仅用于换取临时凭证，不落盘、不写入日志（stderr 仅输出诊断）。
 - 删除为软删除（解除 Tag 与 Manifest 绑定），空间回收需仓库侧执行 GC，UI 已做二次确认与提示。
 
+## 发布
+
+推一个 `v*` tag 并创建 GitHub Release，CI（`.github/workflows/plugin-release.yml`）会：跑全量测试 → 交叉编译六个平台 → 把每个 `.dbxp` 与汇总的 `release-candidates.json` 传到该 Release。
+
+- **`.dbxp` 不提交进 Git**（`dist/` 已忽略），只作为 Release 附件。
+- `release-candidates.json` 是 `dbx-store` 自动更新工作流读取的清单；上架官方商店需要候选包 + 源码 tag +（首次）`.dbx-store.json` 里的展示信息。
+- 当前发布的是**未签名候选包**，安装需在插件中心开启「允许安装未签名开发包」。
+
 ## 里程碑
 
 - Phase 1（预设 + 多模式认证）✅
 - Phase 2（Tag 管理：修改/删除）✅
 - Phase 3（Harbor 深度适配：项目树 + 漏洞面板）✅
-- Phase 4（打包发布）✅ 已生成 `.dbxp` 候选包；上架 `dbx-store` 走发布工作流 + 官方签名。
+- Phase 4（打包发布）✅ 六平台候选包 + 发布工作流就绪。
 
-PRD 功能项状态：2.1 连接与预设 ✅ / 2.2 项目与镜像浏览 ✅ / 2.3 Tag 管理与 Manifest 解析 ✅（含重命名）/ **2.4 DevOps 快捷工具与运维 ✅**（命令生成器 + 无 Tag 清理）。
+PRD 功能项状态：2.1 连接与预设 ✅ / 2.2 项目与镜像浏览 ✅（Harbor 项目 + V2 命名空间）/ 2.3 Tag 管理与 Manifest 解析 ✅（含重命名）/ 2.4 DevOps 快捷工具与运维 ✅（命令生成器 + 无 Tag 清理）。
+
+PRD 之外的部分（用户后续追加）：总览页签与图表、架构徽章、项目配额、操作日志、新建项目、连接诊断（已于 1.7.0 移除）。
+
+## 许可
+
+[Apache-2.0](LICENSE)。插件使用官方 SDK `github.com/t8y2/dbx/plugins/sdk/go/dbx-plugin-sdk`（同样为 Apache-2.0）。

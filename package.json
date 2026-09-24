@@ -18,7 +18,8 @@
     "test:cleanup": "python3 tools/test-cleanup-e2e.py",
     "test:retag": "python3 tools/test-retag-e2e.py",
     "test:ui": "python3 tools/make-preview.py && python3 tools/test-ui-e2e.py",
-    "test": "npm run test:settings && npm run test:layers && npm run test:cleanup && npm run test:retag && npm run test:ui && npm run contrast"
+    "test": "npm run test:settings && npm run test:layers && npm run test:cleanup && npm run test:retag && npm run test:ui && npm run contrast && npm run i18n",
+    "i18n": "python3 tools/check-i18n.py"
   },
   "devDependencies": {
     "@dbx-app/plugin-cli": "^0.1.9"
