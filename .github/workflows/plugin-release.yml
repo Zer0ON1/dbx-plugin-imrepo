@@ -24,10 +24,19 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
+          # Off by default. The plugin CLI is the sidecar's SDK source, so the
+          # install is on the critical path of every build; package-lock.json is
+          # at the root, which is where the action looks.
+          cache: "npm"
 
       - uses: actions/setup-go@v7
         with:
           go-version: "1.22"
+          # The module lives in backend/, so the action's default root-level
+          # go.mod lookup finds nothing and skips caching entirely. Not a
+          # failure, but it means six cross-compiles recompile the standard
+          # library from scratch on every run.
+          cache-dependency-path: backend/go.mod
 
       # Installs @dbx-app/plugin-cli, which bundles the Go SDK the sidecar builds
       # against.
