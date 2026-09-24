@@ -786,8 +786,20 @@ def main() -> int:
               len(V2_AUTH) > before
               and V2_AUTH[-1] == "Basic " + _b64.b64encode(b"admin:fixture-pass").decode(),
               V2_AUTH[-1:] if len(V2_AUTH) > before else None)
-        credFile = cfg / "imrepo-dbx-plugin" / "credentials.json"
-        check("the credential file exists in the isolated config dir", credFile.exists(), credFile)
+        # Ask the sidecar where its config lives rather than rebuilding the path
+        # here: os.UserConfigDir() is %AppData% on Windows, but
+        # $HOME/Library/Application Support on macOS and $XDG_CONFIG_HOME (or
+        # ~/.config) elsewhere. Hardcoding one layout is right on at most two of
+        # the three platforms — this check failed on macOS for exactly that
+        # reason, while the settings-path check above passed because it only
+        # looks for the temp dir as a substring.
+        app_info = sc.result("app/info", {})
+        settings_path = app_info.get("settingsPath") or ""
+        check("the sidecar reports a settings file to derive the config dir from",
+              settings_path.endswith("settings.json"), settings_path)
+        credFile = pathlib.Path(settings_path).parent / "credentials.json"
+        check("the credential file exists in the isolated config dir",
+              credFile.exists() and str(cfg) in str(credFile), credFile)
         on_disk = json.loads(credFile.read_text(encoding="utf-8")) if credFile.exists() else {}
         check("it stores the base64-encoded password per connection",
               (on_disk.get("secrets") or {}).get(CONN) == _b64.b64encode(b"fixture-pass").decode(),

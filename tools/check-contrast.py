@@ -12,9 +12,13 @@ Run:  python tools/check-contrast.py            (exit 0 = all pass)
 
 from __future__ import annotations
 
+import pathlib
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _harness  # noqa: E402,F401  (forces a UTF-8 console — see its docstring)
 
 CSS = Path(__file__).resolve().parent.parent / "ui" / "styles.css"
 

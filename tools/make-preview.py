@@ -30,6 +30,11 @@ import pathlib
 import re
 import sys
 
+# The harness is imported for one side effect: a UTF-8 stdout/stderr. Windows
+# consoles default to a legacy code page, and this tool prints non-ASCII.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _harness  # noqa: E402,F401
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 INDEX = ROOT / "ui" / "index.html"
 MOCK = ROOT / ".preview" / "mock.js"

@@ -57,6 +57,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      # Belt and braces with tools/_harness.py's force_utf8_console(): Windows
+      # consoles default to a legacy code page, and the suites print non-ASCII.
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
 

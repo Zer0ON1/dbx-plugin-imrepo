@@ -30,6 +30,25 @@ import zipfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
 
+
+def force_utf8_console() -> None:
+    """Make stdout/stderr UTF-8 regardless of the platform's default.
+
+    Windows consoles default to a legacy code page (cp1252), and printing any
+    character outside it — the arrows and check marks these tools use, or the
+    Chinese that comes back from fixtures — raises UnicodeEncodeError and kills
+    the run mid-suite. That looks like a product failure and is not one.
+
+    Called on import so every tool that imports this module is covered; the few
+    that do not import it call it explicitly.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+force_utf8_console()
+
 # .dbxp target names use x64/arm64, Python reports x86_64/aarch64.
 _ARCH = {"x86_64": "x64", "amd64": "x64", "aarch64": "arm64", "arm64": "arm64"}
 
