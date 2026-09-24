@@ -172,8 +172,15 @@ def main() -> int:
         # hardcoded "1.2." broke the moment the plugin moved to 1.3.0.
         check("About shows the plugin version and id",
               bool(re.search(r"\b\d+\.\d+\.\d+\b", dom)) and "com.dbx.plugin.imrepo" in dom)
-        check("the GitHub link shows a placeholder instead of a dead link",
-              "待补充" in dom and "settings.github" not in dom)
+        # The backend always reports the project page now, so the placeholder is
+        # only reachable for a fork that has not set one (?nogithub=1).
+        check("About links to the project page",
+              'href="https://github.com/' in dom and "待补充" not in dom)
+        # A fork that has not set a project page gets a placeholder rather than a
+        # dead link, so that branch needs its own render to stay covered.
+        no_link = browser.dom("theme=light&modal=settings&nogithub=1", 5000)
+        check("a missing project page renders a placeholder, not a dead link",
+              "待补充" in no_link and "settings.githubSoon" not in no_link)
         check("the settings file path is shown", "settings.json" in dom)
         check("user management offers create / change-password / delete",
               "创建用户" in dom and "修改密码" in dom and "删除" in dom)

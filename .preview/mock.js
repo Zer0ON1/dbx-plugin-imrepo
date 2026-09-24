@@ -227,9 +227,13 @@
       generatedAt: "2026-09-23T09:12:04Z",
     },
     "app/info": {
-      pluginId: "com.dbx.plugin.imrepo", version: "1.3.1", protocolVersion: 1,
-      transport: "stdio-jsonl", github: "",
-      settingsPath: 'C:/Users/Administrator/AppData/Roaming/imrepo-dbx-plugin/settings.json',
+      pluginId: "com.dbx.plugin.imrepo", version: "0.1.0", protocolVersion: 1,
+      transport: "stdio-jsonl",
+      // Mirrors the backend, which now always reports the project page. A fork
+      // that has not set one sends "" — the About panel renders a placeholder
+      // rather than a dead link — so ?nogithub=1 keeps that branch reachable.
+      github: params.get("nogithub") ? "" : "https://github.com/Zer0ON1/dbx-plugin-imrepo",
+      settingsPath: "/home/dev/.config/imrepo-dbx-plugin/settings.json",
     },
     "harbor/scannerInfo": {
       available: true,

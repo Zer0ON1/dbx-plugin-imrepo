@@ -3,7 +3,7 @@
   "manifest_version": 1,
   "id": "com.dbx.plugin.imrepo",
   "name": "IMREPO",
-  "version": "1.8.0",
+  "version": "0.1.0",
   "publisher": "dbx",
   "description": "IMREPO - Image Registry Studio: browse, manage and inspect OCI / Harbor container registries from a single workbench.",
   "icon": "assets/plugin.svg",

@@ -22,7 +22,7 @@ func (e *methodNotFoundError) Error() string { return "method not found: " + e.m
 // sidecar launched straight out of a build directory).
 const (
 	pluginID      = "com.dbx.plugin.imrepo"
-	pluginVersion = "1.8.0"
+	pluginVersion = "0.1.0"
 )
 
 // githubURL is the project page shown in Settings → About.

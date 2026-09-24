@@ -206,7 +206,7 @@ req = '{"jsonrpc":"2.0","id":1,"method":"plugin/initialize","params":{"host":{"p
 print(subprocess.run(['/tmp/sidecar'], input=req, capture_output=True, text=True).stdout)
 PY
 # → {"id":1,"jsonrpc":"2.0","result":{"capabilities":["connections"],
-#     "plugin":{"id":"com.dbx.plugin.imrepo","version":"1.8.0"},"protocolVersion":1}}
+#     "plugin":{"id":"com.dbx.plugin.imrepo","version":"0.1.0"},"protocolVersion":1}}
 ```
 
 ## 测试
