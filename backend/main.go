@@ -21,7 +21,7 @@ func (e *methodNotFoundError) Error() string { return "method not found: " + e.m
 // Fallbacks, used only when the packaged manifest cannot be located (e.g. a
 // sidecar launched straight out of a build directory).
 const (
-	pluginID      = "com.dbx.plugin.imrepo"
+	pluginID      = "com.leavingrain.imrepo"
 	pluginVersion = "0.1.0"
 )
 

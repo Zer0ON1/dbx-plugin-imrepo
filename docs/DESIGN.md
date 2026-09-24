@@ -42,7 +42,7 @@
 宿主会校验后端自报身份与清单是否一致，不一致直接拒绝初始化：
 
 ```
-Plugin backend identity 'com.dbx.plugin.imrepo/1.2.0' does not match manifest 'com.dbx.plugin.imrepo/1.2.1'
+Plugin backend identity 'com.leavingrain.imrepo/1.2.0' does not match manifest 'com.leavingrain.imrepo/1.2.1'
 ```
 
 为了让"发版忘了同步两处版本号"这类问题不可能再发生，Sidecar **不再硬编码版本**：启动时从自身所在位置向上查找 `manifest.json`（安装后位于 `<plugin>/bin/<target>/`，即向上 3 级；`dbx-plugin dev` 下同样能找到项目清单），用清单里的 `id`/`version` 作为自报身份，找不到才回退到编译期常量并在 stderr 打一行诊断。
@@ -62,7 +62,7 @@ req = '{"jsonrpc":"2.0","id":1,"method":"plugin/initialize","params":{"host":{"p
 print(subprocess.run(['/tmp/sidecar'], input=req, capture_output=True, text=True).stdout)
 PY
 # → {"id":1,"jsonrpc":"2.0","result":{"capabilities":["connections"],
-#     "plugin":{"id":"com.dbx.plugin.imrepo","version":"0.1.0"},"protocolVersion":1}}
+#     "plugin":{"id":"com.leavingrain.imrepo","version":"0.1.0"},"protocolVersion":1}}
 ```
 
 ### 翻译门禁（防"界面上显示键名"）

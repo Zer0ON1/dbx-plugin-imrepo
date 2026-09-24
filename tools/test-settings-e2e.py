@@ -813,10 +813,10 @@ def main() -> int:
         before = len(V2_AUTH)
         sc.seq += 1
         sc.proc.stdin.write(json.dumps({"jsonrpc": "2.0", "id": sc.seq, "method": "connection/connect",
-            "params": {"provider": {"id": "com.dbx.plugin.imrepo.connection", "databaseType": "imrepo-registry"},
+            "params": {"provider": {"id": "com.leavingrain.imrepo.connection", "databaseType": "imrepo-registry"},
                        "connection": {"id": "hostshape-conn", "db_type": "plugin",
-                                      "plugin_id": "com.dbx.plugin.imrepo",
-                                      "plugin_connection_provider": "com.dbx.plugin.imrepo.connection",
+                                      "plugin_id": "com.leavingrain.imrepo",
+                                      "plugin_connection_provider": "com.leavingrain.imrepo.connection",
                                       "plugin_connection_type": "imrepo-registry",
                                       "name": "IMREPO", "host": "127.0.0.1", "port": PORT,
                                       "username": "admin",

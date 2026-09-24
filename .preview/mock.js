@@ -227,7 +227,7 @@
       generatedAt: "2026-09-23T09:12:04Z",
     },
     "app/info": {
-      pluginId: "com.dbx.plugin.imrepo", version: "0.1.0", protocolVersion: 1,
+      pluginId: "com.leavingrain.imrepo", version: "0.1.0", protocolVersion: 1,
       transport: "stdio-jsonl",
       // Mirrors the backend, which now always reports the project page. A fork
       // that has not set one sends "" — the About panel renders a placeholder

@@ -146,7 +146,7 @@ def sources(target: str, binary: pathlib.Path) -> list[tuple[str, bytes]]:
 
 
 def build_target(target: str, goos: str, goarch: str, sdk: pathlib.Path,
-                 version: str, url_prefix: str) -> dict:
+                 plugin_id: str, version: str, url_prefix: str) -> dict:
     DIST.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory() as tmpdir:
         binary = pathlib.Path(tmpdir) / sidecar_filename(target)
@@ -157,7 +157,9 @@ def build_target(target: str, goos: str, goarch: str, sdk: pathlib.Path,
             "algorithm": "sha256",
             "files": {name: hashlib.sha256(blob).hexdigest() for name, blob in entries},
         }
-        package = DIST / f"com.dbx.plugin.imrepo-{version}-{target}.dbxp"
+        # Named from the manifest, not a literal: the plugin id is the one thing
+        # a rename must not have to chase through the build tooling.
+        package = DIST / f"{plugin_id}-{version}-{target}.dbxp"
         with zipfile.ZipFile(package, "w", zipfile.ZIP_DEFLATED) as archive:
             for name, blob in entries:
                 info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
@@ -195,9 +197,9 @@ def main() -> int:
     sdk = sdk_root()
     print(f"IMREPO {version}: building {len(wanted)} target(s)\n  sdk: {sdk}")
 
-    artifacts = [build_target(t, *TARGETS[t], sdk, version, args.url_prefix) for t in wanted]
-
     meta = manifest()
+    artifacts = [build_target(t, *TARGETS[t], sdk, meta["id"], version, args.url_prefix)
+                 for t in wanted]
     candidates = {
         "plugin": {
             "id": meta["id"],

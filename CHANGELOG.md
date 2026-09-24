@@ -1,8 +1,8 @@
 # Changelog
 
 Notable changes per release. Versions follow the plugin id
-`com.dbx.plugin.imrepo`; packages are named
-`com.dbx.plugin.imrepo-<version>-<target>.dbxp`.
+`com.leavingrain.imrepo`; packages are named
+`com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
 ## 0.1.0
 

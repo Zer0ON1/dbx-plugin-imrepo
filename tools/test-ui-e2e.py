@@ -22,6 +22,7 @@ Run:  python tools/test-ui-e2e.py      (exit 0 = all pass; skips if no browser)
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import shutil
@@ -34,6 +35,9 @@ import _harness  # noqa: E402  (needs the path fix above)
 
 ROOT = _harness.ROOT
 PREVIEW = ROOT / ".preview" / "preview.html"
+# Read from the manifest rather than restating it: a plugin-id rename should not
+# have to be chased into the tests.
+PLUGIN_ID = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))["id"]
 SLOW = "ledger-api"      # deliberately delayed repository
 FAST = "audit-api"            # answers immediately
 
@@ -171,7 +175,7 @@ def main() -> int:
         # Match the version by shape (x.y.z), never by a literal prefix — a
         # hardcoded "1.2." broke the moment the plugin moved to 1.3.0.
         check("About shows the plugin version and id",
-              bool(re.search(r"\b\d+\.\d+\.\d+\b", dom)) and "com.dbx.plugin.imrepo" in dom)
+              bool(re.search(r"\b\d+\.\d+\.\d+\b", dom)) and PLUGIN_ID in dom)
         # The backend always reports the project page now, so the placeholder is
         # only reachable for a fork that has not set one (?nogithub=1).
         check("About links to the project page",
