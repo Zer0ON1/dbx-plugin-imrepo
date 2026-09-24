@@ -17,11 +17,11 @@ to notice by hand:
   E  cleanup   — with no selection there is no way to trigger a deletion.
 
 Run:  python tools/test-ui-e2e.py      (exit 0 = all pass; skips if no browser)
+      CHROME_HEADLESS_SHELL=/path/to/chrome-headless-shell to pick the browser
 """
 
 from __future__ import annotations
 
-import glob
 import pathlib
 import re
 import shutil
@@ -29,40 +29,17 @@ import subprocess
 import sys
 import tempfile
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _harness  # noqa: E402  (needs the path fix above)
+
+ROOT = _harness.ROOT
 PREVIEW = ROOT / ".preview" / "preview.html"
 SLOW = "ledger-api"      # deliberately delayed repository
 FAST = "audit-api"            # answers immediately
 
-EDGE_CANDIDATES = [
-    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-    "/usr/bin/microsoft-edge",
-    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-]
-
-failures: list[str] = []
-checks_run = 0
-
-
-def check(label: str, ok: bool, detail: str = "") -> None:
-    # Total is counted here so the run reports how many assertions really executed.
-    global checks_run
-    checks_run += 1
-    print(f"  [{'PASS' if ok else 'FAIL'}] {label}" + (f"\n        {detail}" if detail and not ok else ""))
-    if not ok:
-        failures.append(label)
-
-
-def find_browser() -> str | None:
-    for path in EDGE_CANDIDATES:
-        if pathlib.Path(path).exists():
-            return path
-    for name in ("microsoft-edge", "chromium", "google-chrome", "chrome"):
-        found = shutil.which(name)
-        if found:
-            return found
-    return None
+_reporter = _harness.Reporter("ui")
+check = _reporter.check
+find_browser = _harness.find_browser
 
 
 class Browser:
@@ -101,6 +78,8 @@ def main() -> int:
     exe = find_browser()
     if not exe:
         print("no Chromium-based browser found (Edge/Chrome); skipping.")
+        print("  install one, or point CHROME_HEADLESS_SHELL at chrome-headless-shell:")
+        print("    CHROME_HEADLESS_SHELL=/path/to/chrome-headless-shell python3 tools/test-ui-e2e.py")
         return 0
     print(f"browser: {exe}")
     print(f"harness: {PREVIEW.relative_to(ROOT)}")
@@ -338,14 +317,7 @@ def main() -> int:
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
-    print()
-    if failures:
-        print(f"RESULT: {len(failures)} of {checks_run} CHECK(S) FAILED")
-        for f in failures:
-            print("  -", f)
-        return 1
-    print(f"RESULT: ALL PASS ({checks_run} checks)")
-    return 0
+    return _reporter.report()
 
 
 if __name__ == "__main__":

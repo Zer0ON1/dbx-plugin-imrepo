@@ -40,7 +40,6 @@ Run:  python tools/test-settings-e2e.py      (exit 0 = all pass)
 
 from __future__ import annotations
 
-import glob
 import http.server
 import json
 import os
@@ -51,10 +50,12 @@ import sys
 import tempfile
 import threading
 import urllib.parse
-import zipfile
 from datetime import datetime, timedelta, timezone
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _harness  # noqa: E402  (needs the path fix above)
+
+ROOT = _harness.ROOT
 PORT = 5037
 PROJECT = "payments"
 CONN = "settings-conn"
@@ -319,8 +320,10 @@ class Sidecar:
     """One sidecar process. Relaunching it is how persistence is proved."""
 
     def __init__(self, exe: pathlib.Path, cfg: pathlib.Path):
-        env = dict(os.environ, APPDATA=str(cfg), LOCALAPPDATA=str(cfg), HOME=str(cfg),
-                   USERPROFILE=str(cfg))
+        # cfg is the config dir the sidecar must use; _harness sets every env var
+        # Go's os.UserConfigDir() consults, on Windows and elsewhere.
+        env = dict(_harness.isolated_env(), XDG_CONFIG_HOME=str(cfg), APPDATA=str(cfg),
+                   LOCALAPPDATA=str(cfg), USERPROFILE=str(cfg), HOME=str(cfg))
         self.proc = subprocess.Popen(
             [str(exe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, encoding="utf-8", bufsize=1, env=env,
@@ -369,16 +372,8 @@ class Sidecar:
             self.proc.kill()
 
 
-failures: list[str] = []
-checks_run = 0
-
-
-def check(label: str, ok: bool, detail="") -> None:
-    global checks_run
-    checks_run += 1
-    print(f"  [{'PASS' if ok else 'FAIL'}] {label}" + (f"\n        {detail}" if detail and not ok else ""))
-    if not ok:
-        failures.append(label)
+_reporter = _harness.Reporter("settings")
+check = _reporter.check
 
 
 def settings_payload(**over) -> dict:
@@ -393,25 +388,18 @@ def settings_payload(**over) -> dict:
 
 
 def main() -> int:
-    packages = glob.glob(str(ROOT / "dist" / "*windows-x64.dbxp"))
-    if not packages:
-        sys.exit("no .dbxp in dist/ — run: npx --no-install @dbx-app/plugin-cli package .")
-    package = pathlib.Path(max(packages, key=os.path.getmtime))
-    print(f"package under test: {package.name}")
-
-    work = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-settings-"))
-    bindir = work / "bin" / "windows-x64"
-    bindir.mkdir(parents=True)
+    exe, manifest, work = _harness.extract_sidecar()
     cfg = work / "cfg"
     cfg.mkdir()
-    with zipfile.ZipFile(package) as z:
-        (bindir / "imrepo-sidecar.exe").write_bytes(z.read("bin/windows-x64/imrepo-sidecar.exe"))
-        (work / "manifest.json").write_bytes(z.read("manifest.json"))
-        manifest = json.loads(z.read("manifest.json"))
+
+    print("\nP) package layout (the manifest must point at a file that ships)")
+    layout_errors = _harness.package_layout_errors(_harness.find_package())
+    check("packaged manifest points at the packaged sidecar", not layout_errors, layout_errors)
+    check("packaged manifest keeps the repository identity",
+          manifest["id"] == json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))["id"], manifest["id"])
 
     srv = Server(("127.0.0.1", PORT), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    exe = bindir / "imrepo-sidecar.exe"
 
     try:
         print("\nA) defaults, identity and the settings file location")
@@ -942,14 +930,7 @@ def main() -> int:
     finally:
         srv.shutdown()
 
-    print()
-    if failures:
-        print(f"FAILED — {len(failures)} of {checks_run} check(s):")
-        for f in failures:
-            print("   -", f)
-        return 1
-    print(f"ALL SETTINGS CHECKS PASSED ({checks_run} checks)")
-    return 0
+    return _reporter.report()
 
 
 if __name__ == "__main__":

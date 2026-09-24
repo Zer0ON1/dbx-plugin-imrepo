@@ -22,20 +22,20 @@ Run:  python tools/test-cleanup-e2e.py      (exit 0 = all pass)
 
 from __future__ import annotations
 
-import glob
 import http.server
 import json
-import os
 import pathlib
 import shutil
 import socketserver
 import subprocess
 import sys
-import tempfile
 import threading
-import zipfile
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _harness  # noqa: E402  (needs the path fix above)
+
+ROOT = _harness.ROOT
+_reporter = _harness.Reporter("cleanup")
 PORT = 5031
 PROJECT = "payments"
 
@@ -142,23 +142,12 @@ class Server(socketserver.ThreadingTCPServer):
     daemon_threads = True
 
 
-def isolated_env() -> dict:
-    """Keep the sidecar off the real user config dir.
-
-    Settings are read from %APPDATA%, so without this a test would inherit
-    whatever policy the developer happens to have saved — and a failing cleanup
-    rule would look like a code bug.
-    """
-    cfg = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-cfg-"))
-    return dict(os.environ, APPDATA=str(cfg), LOCALAPPDATA=str(cfg),
-                HOME=str(cfg), USERPROFILE=str(cfg))
-
 class Sidecar:
     def __init__(self, exe: pathlib.Path):
         self.proc = subprocess.Popen(
             [str(exe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, encoding="utf-8", bufsize=1,
-            env=isolated_env(),
+            env=_harness.isolated_env(),
         )
         self.seq = 0
 
@@ -183,38 +172,19 @@ class Sidecar:
         assert "error" not in reply, reply
 
 
-failures: list[str] = []
-checks_run = 0
-
-
-def check(label: str, ok: bool, detail="") -> None:
-    global checks_run
-    checks_run += 1
-    print(f"  [{'PASS' if ok else 'FAIL'}] {label}" + (f"\n        {detail}" if detail and not ok else ""))
-    if not ok:
-        failures.append(label)
+check = _reporter.check
 
 
 def main() -> int:
-    packages = glob.glob(str(ROOT / "dist" / "*windows-x64.dbxp"))
-    if not packages:
-        sys.exit("no .dbxp in dist/ — run: npx --no-install @dbx-app/plugin-cli package .")
-    package = pathlib.Path(max(packages, key=os.path.getmtime))
-    print(f"package under test: {package.name}")
-
-    work = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-cleanup-"))
-    bindir = work / "bin" / "windows-x64"
-    bindir.mkdir(parents=True)
-    with zipfile.ZipFile(package) as z:
-        (bindir / "imrepo-sidecar.exe").write_bytes(z.read("bin/windows-x64/imrepo-sidecar.exe"))
-        (work / "manifest.json").write_bytes(z.read("manifest.json"))
+    exe, _manifest, work = _harness.extract_sidecar()
+    check = _reporter.check
 
     srv = Server(("127.0.0.1", PORT), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
 
     try:
         print("\nA) scan a project for dangling artifacts")
-        sc = Sidecar(bindir / "imrepo-sidecar.exe")
+        sc = Sidecar(exe)
         sc.connect("h1")
         r = sc.call("harbor/untagged", {"connectionId": "h1", "project": PROJECT})
         scan = r.get("result") or {}
@@ -286,7 +256,7 @@ def main() -> int:
             print("   message:", r5["error"]["message"])
 
         print("\nF) a plain OCI v2 registry gets a clear error, not an empty result")
-        sc2 = Sidecar(bindir / "imrepo-sidecar.exe")
+        sc2 = Sidecar(exe)
         sc2.connect("d1", "docker-v2")
         r6 = sc2.call("harbor/untagged", {"connectionId": "d1", "project": PROJECT})
         r7 = sc2.call("harbor/cleanupUntagged", {"connectionId": "d1", "project": PROJECT, "targets": []})
@@ -298,14 +268,7 @@ def main() -> int:
         srv.shutdown()
         shutil.rmtree(work, ignore_errors=True)
 
-    print()
-    if failures:
-        print(f"RESULT: {len(failures)} of {checks_run} CHECK(S) FAILED")
-        for f in failures:
-            print("  -", f)
-        return 1
-    print(f"RESULT: ALL PASS ({checks_run} checks)")
-    return 0
+    return _reporter.report()
 
 
 if __name__ == "__main__":

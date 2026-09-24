@@ -21,20 +21,20 @@ Run:  python tools/test-retag-e2e.py        (exit 0 = all pass)
 
 from __future__ import annotations
 
-import glob
 import http.server
 import json
-import os
 import pathlib
 import shutil
 import socketserver
 import subprocess
 import sys
-import tempfile
 import threading
-import zipfile
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _harness  # noqa: E402  (needs the path fix above)
+
+ROOT = _harness.ROOT
+_reporter = _harness.Reporter("retag")
 PORT = 5013
 REPO = "payments/ledger-api"
 OLD, NEW = "2026-09-22_141718", "v1.0.1"
@@ -45,10 +45,7 @@ MANIFEST_BODY = json.dumps(
 
 
 def newest_package() -> pathlib.Path:
-    found = glob.glob(str(ROOT / "dist" / "*windows-x64.dbxp"))
-    if not found:
-        sys.exit("no .dbxp in dist/ — run: npx --no-install @dbx-app/plugin-cli package .")
-    return pathlib.Path(max(found, key=os.path.getmtime))
+    return _harness.find_package()
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -103,17 +100,6 @@ class Server(socketserver.ThreadingTCPServer):
     daemon_threads = True
 
 
-def isolated_env() -> dict:
-    """Keep the sidecar off the real user config dir.
-
-    Settings are read from %APPDATA%, so without this a test would inherit
-    whatever policy the developer happens to have saved — and a failing cleanup
-    rule would look like a code bug.
-    """
-    cfg = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-cfg-"))
-    return dict(os.environ, APPDATA=str(cfg), LOCALAPPDATA=str(cfg),
-                HOME=str(cfg), USERPROFILE=str(cfg))
-
 class Sidecar:
     """One stdio-jsonl sidecar process; `call` writes a request and reads its reply."""
 
@@ -121,7 +107,7 @@ class Sidecar:
         self.proc = subprocess.Popen(
             [str(exe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, encoding="utf-8", bufsize=1,
-            env=isolated_env(),
+            env=_harness.isolated_env(),
         )
         self.seq = 0
 
@@ -155,34 +141,14 @@ class Sidecar:
 
 
 def main() -> int:
-    package = newest_package()
-    print(f"package under test: {package.name}")
-
-    workdir = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-retag-"))
+    exe, _manifest, workdir = _harness.extract_sidecar()
     log_path = workdir / "requests.log"
     Handler.log_path = log_path
-
-    bindir = workdir / "bin" / "windows-x64"
-    bindir.mkdir(parents=True)
-    with zipfile.ZipFile(package) as z:
-        (bindir / "imrepo-sidecar.exe").write_bytes(z.read("bin/windows-x64/imrepo-sidecar.exe"))
-        (workdir / "manifest.json").write_bytes(z.read("manifest.json"))
-    exe = bindir / "imrepo-sidecar.exe"
 
     srv = Server(("127.0.0.1", PORT), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
 
-    failures: list[str] = []
-    checks_run = 0
-
-    def check(label: str, ok: bool, detail="") -> None:
-        # Counting here keeps the documented totals honest: a run reports how many
-        # assertions it actually executed.
-        nonlocal checks_run
-        checks_run += 1
-        print(f"  [{'PASS' if ok else 'FAIL'}] {label}" + (f"\n        {detail}" if detail and not ok else ""))
-        if not ok:
-            failures.append(label)
+    check = _reporter.check
 
     def mark() -> int:
         return len(log_path.read_text(encoding="utf-8").splitlines()) if log_path.exists() else 0
@@ -248,14 +214,7 @@ def main() -> int:
         srv.shutdown()
         shutil.rmtree(workdir, ignore_errors=True)
 
-    print()
-    if failures:
-        print(f"RESULT: {len(failures)} of {checks_run} CHECK(S) FAILED")
-        for f in failures:
-            print("  -", f)
-        return 1
-    print(f"RESULT: ALL PASS ({checks_run} checks)")
-    return 0
+    return _reporter.report()
 
 
 if __name__ == "__main__":

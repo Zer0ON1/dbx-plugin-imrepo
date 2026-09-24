@@ -24,20 +24,20 @@ Run:  python tools/test-layers-e2e.py        (exit 0 = all pass)
 
 from __future__ import annotations
 
-import glob
 import http.server
 import json
-import os
 import pathlib
 import shutil
 import socketserver
 import subprocess
 import sys
-import tempfile
 import threading
-import zipfile
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _harness  # noqa: E402  (needs the path fix above)
+
+ROOT = _harness.ROOT
+_reporter = _harness.Reporter("layers")
 PORT = 5022
 REPO = "payments/ledger-api"
 
@@ -174,23 +174,12 @@ class Server(socketserver.ThreadingTCPServer):
     daemon_threads = True
 
 
-def isolated_env() -> dict:
-    """Keep the sidecar off the real user config dir.
-
-    Settings are read from %APPDATA%, so without this a test would inherit
-    whatever policy the developer happens to have saved — and a failing cleanup
-    rule would look like a code bug.
-    """
-    cfg = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-cfg-"))
-    return dict(os.environ, APPDATA=str(cfg), LOCALAPPDATA=str(cfg),
-                HOME=str(cfg), USERPROFILE=str(cfg))
-
 class Sidecar:
     def __init__(self, exe: pathlib.Path):
         self.proc = subprocess.Popen(
             [str(exe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, encoding="utf-8", bufsize=1,
-            env=isolated_env(),
+            env=_harness.isolated_env(),
         )
         self.seq = 0
 
@@ -219,37 +208,15 @@ class Sidecar:
 
 
 def main() -> int:
-    packages = glob.glob(str(ROOT / "dist" / "*windows-x64.dbxp"))
-    if not packages:
-        sys.exit("no .dbxp in dist/ — run: npx --no-install @dbx-app/plugin-cli package .")
-    package = pathlib.Path(max(packages, key=os.path.getmtime))
-    print(f"package under test: {package.name}")
-
-    work = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-layers-"))
-    bindir = work / "bin" / "windows-x64"
-    bindir.mkdir(parents=True)
-    with zipfile.ZipFile(package) as z:
-        (bindir / "imrepo-sidecar.exe").write_bytes(z.read("bin/windows-x64/imrepo-sidecar.exe"))
-        (work / "manifest.json").write_bytes(z.read("manifest.json"))
+    exe, _manifest, work = _harness.extract_sidecar()
+    check = _reporter.check
 
     srv = Server(("127.0.0.1", PORT), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
 
-    failures: list[str] = []
-    checks_run = 0
-
-    def check(label: str, ok: bool, detail="") -> None:
-        # Counting here keeps the documented totals honest: a run reports how many
-        # assertions it actually executed.
-        nonlocal checks_run
-        checks_run += 1
-        print(f"  [{'PASS' if ok else 'FAIL'}] {label}" + (f"\n        {detail}" if detail and not ok else ""))
-        if not ok:
-            failures.append(label)
-
     def run(name: str) -> tuple[dict, dict]:
         Handler.fixture = SCENARIOS[name]
-        sc = Sidecar(bindir / "imrepo-sidecar.exe")
+        sc = Sidecar(exe)
         sc.connect("c1")
         r = sc.layers("c1")
         return r, r.get("result") or {}
@@ -311,14 +278,7 @@ def main() -> int:
         srv.shutdown()
         shutil.rmtree(work, ignore_errors=True)
 
-    print()
-    if failures:
-        print(f"RESULT: {len(failures)} of {checks_run} CHECK(S) FAILED")
-        for f in failures:
-            print("  -", f)
-        return 1
-    print(f"RESULT: ALL PASS ({checks_run} checks)")
-    return 0
+    return _reporter.report()
 
 
 if __name__ == "__main__":
