@@ -22,13 +22,11 @@ func (e *methodNotFoundError) Error() string { return "method not found: " + e.m
 // sidecar launched straight out of a build directory).
 const (
 	pluginID      = "com.dbx.plugin.imrepo"
-	pluginVersion = "1.4.1"
+	pluginVersion = "1.8.0"
 )
 
-// githubURL is the project page shown in Settings → About. Left empty on
-// purpose until the repository is public; the UI renders a "coming soon" hint
-// instead of a dead link.
-const githubURL = ""
+// githubURL is the project page shown in Settings → About.
+const githubURL = "https://github.com/Zer0ON1/dbx-plugin-imrepo"
 
 // identity resolved at startup (manifest wins), so both the handshake and the
 // About panel report the same thing.

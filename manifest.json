@@ -7,8 +7,8 @@
   "publisher": "dbx",
   "description": "IMREPO - Image Registry Studio: browse, manage and inspect OCI / Harbor container registries from a single workbench.",
   "icon": "assets/plugin.svg",
-  "source": "https://github.com/dbx/imrepo-dbx-plugin",
-  "homepage": "https://github.com/dbx/imrepo-dbx-plugin",
+  "source": "https://github.com/Zer0ON1/dbx-plugin-imrepo",
+  "homepage": "https://github.com/Zer0ON1/dbx-plugin-imrepo",
   "engines": {
     "dbx": ">=0.6.0",
     "host_api": "1"

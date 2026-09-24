@@ -420,7 +420,8 @@ def main() -> int:
         print("   app/info:", json.dumps(info, ensure_ascii=False))
         check("About reports the packaged identity",
               info.get("pluginId") == manifest["id"] and info.get("version") == manifest["version"], info)
-        check("About has no GitHub link yet (empty, not a dead URL)", info.get("github") == "", info.get("github"))
+        check("About links to the project repository",
+              str(info.get("github", "")).startswith("https://github.com/"), info.get("github"))
         check("settings path lives inside the isolated config dir",
               str(cfg) in (info.get("settingsPath") or ""), info.get("settingsPath"))
 

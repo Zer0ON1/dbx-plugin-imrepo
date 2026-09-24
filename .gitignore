@@ -1,13 +1,19 @@
 # Build output — packages are attached to GitHub releases, never committed.
 /dist/
 
+# npm install (the plugin CLI, which bundles the Go SDK used to build the sidecar)
+/node_modules/
+
 # Local dev scratch
 /.dbx-dev/
 /.probe/
 /build-linux.mod
 
-# Generated preview harness + screenshots (regenerate with tools/make-preview.py)
-/.preview/
+# Generated from .preview/mock.js + ui/index.html by tools/make-preview.py.
+# NOTE: .preview/mock.js itself is source — it is the mock bridge the UI tests
+# run against — so it stays tracked and must not be ignored here.
+/.preview/preview.html
+/.preview/*.png
 
 # Signing material
 .dbx-repository-signing-key.env

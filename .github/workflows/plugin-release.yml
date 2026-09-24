@@ -1,72 +1,92 @@
-name: Release DBX plugin
+name: Test and release
 
 on:
+  push:
+    branches: [main]
+  pull_request:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  # Windows package is produced by the official CLI on a Windows runner (the
-  # CLI refuses to cross-compile, so each OS builds its own host target).
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-      - run: npm install --no-audit --no-fund @dbx-app/plugin-cli@0.1.9
-      - run: npx --no-install @dbx-app/plugin-cli package .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-package
-          path: |
-            dist/*-windows-x64.dbxp
-            dist/*-windows-x64.artifact.json
-
-  # Linux packages are assembled by tools/build-linux.py with a statically
-  # linked (CGO_ENABLED=0) Go sidecar, so they run on older distros such as
-  # Kylin V10 (low glibc). One x64 runner cross-compiles both arches.
-  linux:
+  test:
+    name: Build every target and run the suite
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: "22"
+
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
-      - run: npm install --no-audit --no-fund @dbx-app/plugin-cli@0.1.9
-      - name: Build linux-x64 + linux-arm64 (static)
-        env:
-          DBX_PLUGIN_SDK_ROOT: ${{ github.workspace }}/node_modules/@dbx-app/plugin-cli/sdk-root/plugins/sdk/go/dbx-plugin-sdk
-        run: python3 tools/build-linux.py
+
+      # Installs @dbx-app/plugin-cli, which bundles the Go SDK the sidecar
+      # builds against.
+      - name: Install tooling
+        run: npm install --no-audit --no-fund
+
+      # One runner cross-compiles all six targets: CGO_ENABLED=0 makes the
+      # sidecar static, so it does not matter which libc the runner has.
+      - name: Build packages (windows/linux/darwin x x64/arm64)
+        run: python3 tools/build-packages.py
+
+      # The preview harness is generated from ui/index.html; the UI test
+      # renders that file, so it must be regenerated or it tests old markup.
+      - name: Generate preview harness
+        run: python3 tools/make-preview.py
+
+      - name: Install a headless browser
+        run: |
+          curl -sSL -o /tmp/chs.zip https://storage.googleapis.com/chrome-for-testing-public/131.0.6778.204/linux64/chrome-headless-shell-linux64.zip
+          unzip -q /tmp/chs.zip -d /opt
+          echo "CHROME_HEADLESS_SHELL=/opt/chrome-headless-shell-linux64/chrome-headless-shell" >> "$GITHUB_ENV"
+
+      - name: Sidecar end-to-end tests
+        run: |
+          python3 tools/test-settings-e2e.py
+          python3 tools/test-layers-e2e.py
+          python3 tools/test-cleanup-e2e.py
+          python3 tools/test-retag-e2e.py
+
+      - name: Workbench UI tests
+        run: python3 tools/test-ui-e2e.py
+
+      - name: Colour-contrast gate
+        run: python3 tools/check-contrast.py
+
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-package
+          name: packages
           path: |
-            dist/*-linux-x64.dbxp
-            dist/*-linux-x64.artifact.json
-            dist/*-linux-arm64.dbxp
-            dist/*-linux-arm64.artifact.json
+            dist/*.dbxp
+            dist/*.artifact.json
+            dist/release-candidates.json
 
   release:
-    needs: [windows, linux]
+    name: Attach packages to the release
+    needs: [test]
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
+          name: packages
           path: artifacts
-      - name: Upload packages to release
+
+      # The release carries one .dbxp per target plus release-candidates.json,
+      # which is what dbx-store's auto-update workflow reads.
+      - name: Upload packages
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          find artifacts -name '*.dbxp' -o -name '*.artifact.json' | while read f; do
-            gh release upload "${{ github.event.release.tag_name }}" "$f"
+          find artifacts -type f \( -name '*.dbxp' -o -name 'release-candidates.json' \) | while read -r f; do
+            gh release upload "${{ github.event.release.tag_name }}" "$f" --clobber
           done

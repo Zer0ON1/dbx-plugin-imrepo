@@ -1,0 +1,11 @@
+{
+  "name": "IMREPO",
+  "description": "Browse, manage and inspect OCI / Harbor container registries from a single workbench: project and namespace navigation, tag rename and delete, per-layer size analysis, Trivy CVE reports, registry-wide charts and multi-arch breakdowns.",
+  "icon": "assets/plugin.svg",
+  "tags": ["registry", "harbor", "oci", "docker", "containers", "devops"],
+  "permissions": [],
+  "source": "https://github.com/Zer0ON1/dbx-plugin-imrepo",
+  "homepage": "https://github.com/Zer0ON1/dbx-plugin-imrepo",
+  "license": "Apache-2.0",
+  "releaseNotes": "Docker Registry v2 projects (namespaces), registry overview charts, and one badge per architecture in the image views."
+}
