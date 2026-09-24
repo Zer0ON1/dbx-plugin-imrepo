@@ -1,0 +1,18 @@
+# Build output — packages are attached to GitHub releases, never committed.
+/dist/
+
+# Local dev scratch
+/.dbx-dev/
+/.probe/
+/build-linux.mod
+
+# Generated preview harness + screenshots (regenerate with tools/make-preview.py)
+/.preview/
+
+# Signing material
+.dbx-repository-signing-key.env
+
+__pycache__/
+*.pyc
+.DS_Store
+*.log

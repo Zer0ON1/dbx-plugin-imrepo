@@ -1,0 +1,384 @@
+{
+  "$schema": "https://raw.githubusercontent.com/t8y2/dbx/main/plugins/manifest.schema.json",
+  "manifest_version": 1,
+  "id": "com.dbx.plugin.imrepo",
+  "name": "IMREPO",
+  "version": "1.8.0",
+  "publisher": "dbx",
+  "description": "IMREPO - Image Registry Studio: browse, manage and inspect OCI / Harbor container registries from a single workbench.",
+  "icon": "assets/plugin.svg",
+  "source": "https://github.com/dbx/imrepo-dbx-plugin",
+  "homepage": "https://github.com/dbx/imrepo-dbx-plugin",
+  "engines": {
+    "dbx": ">=0.6.0",
+    "host_api": "1"
+  },
+  "permissions": [],
+  "entrypoints": {
+    "ui": {
+      "root": "ui",
+      "entry": "ui/index.html"
+    },
+    "backend": {
+      "executable": "bin/imrepo-sidecar"
+    }
+  },
+  "contributions": [
+    {
+      "type": "connection-provider",
+      "id": "com.dbx.plugin.imrepo.connection",
+      "label": "Container Registry",
+      "icon": "assets/connection.svg",
+      "database_type": "imrepo-registry",
+      "description": "Connect to an OCI / Harbor container registry (Harbor, Docker Registry v2, Docker Hub, GHCR, Aliyun ACR, Tencent TCR, AWS ECR, Azure ACR, Nexus, Artifactory, Quay).",
+      "fields": [
+        {
+          "key": "display_name",
+          "label": "Name",
+          "type": "text",
+          "binding": "name",
+          "required": true,
+          "default": "IMREPO",
+          "placeholder": "e.g. Prod Harbor"
+        },
+        {
+          "key": "registry_type",
+          "label": "Registry type",
+          "type": "select",
+          "binding": "config",
+          "required": true,
+          "default": "harbor",
+          "options": [
+            {
+              "label": "Harbor",
+              "value": "harbor"
+            },
+            {
+              "label": "Docker Registry v2",
+              "value": "docker-v2"
+            },
+            {
+              "label": "Docker Hub",
+              "value": "dockerhub"
+            },
+            {
+              "label": "GitHub GHCR",
+              "value": "ghcr"
+            },
+            {
+              "label": "Aliyun ACR",
+              "value": "aliyun-acr"
+            },
+            {
+              "label": "Tencent TCR",
+              "value": "tencent-tcr"
+            },
+            {
+              "label": "AWS ECR",
+              "value": "aws-ecr"
+            },
+            {
+              "label": "Azure ACR",
+              "value": "azure-acr"
+            },
+            {
+              "label": "Sonatype Nexus 3",
+              "value": "nexus"
+            },
+            {
+              "label": "JFrog Artifactory",
+              "value": "artifactory"
+            },
+            {
+              "label": "Project Quay",
+              "value": "quay"
+            }
+          ]
+        },
+        {
+          "key": "endpoint",
+          "label": "Endpoint",
+          "type": "text",
+          "binding": "host",
+          "required": true,
+          "placeholder": "registry.example.com"
+        },
+        {
+          "key": "scheme",
+          "label": "Protocol",
+          "type": "select",
+          "binding": "config",
+          "required": true,
+          "default": "https",
+          "options": [
+            {
+              "label": "HTTPS",
+              "value": "https"
+            },
+            {
+              "label": "HTTP",
+              "value": "http"
+            }
+          ]
+        },
+        {
+          "key": "port",
+          "label": "Port",
+          "type": "number",
+          "binding": "port",
+          "default": 443
+        },
+        {
+          "key": "insecure",
+          "label": "Allow insecure HTTP / self-signed TLS",
+          "type": "boolean",
+          "binding": "config",
+          "default": false
+        },
+        {
+          "key": "auth_type",
+          "label": "Authentication",
+          "type": "select",
+          "binding": "config",
+          "required": true,
+          "default": "basic",
+          "options": [
+            {
+              "label": "Password / Basic Auth",
+              "value": "basic"
+            },
+            {
+              "label": "No Authentication",
+              "value": "noauth"
+            },
+            {
+              "label": "Harbor Robot Account",
+              "value": "robot"
+            },
+            {
+              "label": "Bearer / Personal Token",
+              "value": "token"
+            },
+            {
+              "label": "AWS ECR (AK/SK)",
+              "value": "aws-ecr"
+            },
+            {
+              "label": "Aliyun ACR (AK/SK)",
+              "value": "aliyun-aksk"
+            },
+            {
+              "label": "Tencent TCR (AK/SK)",
+              "value": "tencent-aksk"
+            }
+          ]
+        },
+        {
+          "key": "username",
+          "label": "Username",
+          "type": "text",
+          "binding": "username",
+          "placeholder": "admin or robot$name",
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "basic",
+              "robot"
+            ]
+          }
+        },
+        {
+          "key": "password",
+          "label": "Password / CLI Secret",
+          "type": "password",
+          "binding": "secret",
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "basic",
+              "robot"
+            ]
+          }
+        },
+        {
+          "key": "token",
+          "label": "Access token (PAT)",
+          "type": "password",
+          "binding": "secret",
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "token"
+            ]
+          }
+        },
+        {
+          "key": "access_key_id",
+          "label": "Access Key ID / SecretId",
+          "type": "text",
+          "binding": "config",
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "aws-ecr",
+              "aliyun-aksk"
+            ]
+          }
+        },
+        {
+          "key": "secret_access_key",
+          "label": "Secret Access Key / SecretKey",
+          "type": "password",
+          "binding": "secret",
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "aws-ecr",
+              "aliyun-aksk"
+            ]
+          }
+        },
+        {
+          "key": "secret_id",
+          "label": "SecretId",
+          "type": "text",
+          "binding": "config",
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "tencent-aksk"
+            ]
+          }
+        },
+        {
+          "key": "secret_key",
+          "label": "SecretKey",
+          "type": "password",
+          "binding": "secret",
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "tencent-aksk"
+            ]
+          }
+        },
+        {
+          "key": "region",
+          "label": "Region",
+          "type": "text",
+          "binding": "config",
+          "placeholder": "ap-northeast-1 / cn-hangzhou / ap-guangzhou",
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "aws-ecr",
+              "aliyun-aksk",
+              "tencent-aksk"
+            ]
+          }
+        },
+        {
+          "key": "instance_id",
+          "label": "Instance ID",
+          "type": "text",
+          "binding": "config",
+          "placeholder": "cri-xxxxxx (Aliyun) / tcr-xxxxxx (Tencent)",
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "aliyun-aksk",
+              "tencent-aksk"
+            ]
+          }
+        }
+      ],
+      "workbench": "com.dbx.plugin.imrepo.main",
+      "capabilities": [
+        "test",
+        "connect",
+        "disconnect"
+      ],
+      "actions": [
+        {
+          "id": "refresh",
+          "label": "Refresh metadata",
+          "variant": "outline",
+          "when": "edit",
+          "requires_valid_form": true,
+          "timeout_ms": 30000
+        }
+      ]
+    },
+    {
+      "type": "workbench",
+      "id": "com.dbx.plugin.imrepo.main",
+      "label": "IMREPO",
+      "icon": "assets/plugin.svg"
+    }
+  ],
+  "localizations": {
+    "zh-CN": {
+      "name": "IMREPO",
+      "description": "IMREPO - 镜像仓库 Studio：在一个工作台内浏览、管理和解析 OCI / Harbor 容器镜像仓库。",
+      "contributions": {
+        "com.dbx.plugin.imrepo.connection": {
+          "label": "容器镜像仓库",
+          "description": "连接 OCI / Harbor 镜像仓库（Harbor、Docker Registry v2、Docker Hub、GHCR、阿里云 ACR、腾讯云 TCR、AWS ECR、Azure ACR、Nexus、Artifactory、Quay）。",
+          "fields": {
+            "display_name": {
+              "label": "名称"
+            },
+            "registry_type": {
+              "label": "仓库类型"
+            },
+            "endpoint": {
+              "label": "地址"
+            },
+            "port": {
+              "label": "端口"
+            },
+            "insecure": {
+              "label": "允许不安全 HTTP / 自签名 TLS"
+            },
+            "auth_type": {
+              "label": "认证方式"
+            },
+            "username": {
+              "label": "用户名"
+            },
+            "password": {
+              "label": "密码 / CLI Secret"
+            },
+            "token": {
+              "label": "访问令牌 (PAT)"
+            },
+            "access_key_id": {
+              "label": "Access Key ID / SecretId"
+            },
+            "secret_access_key": {
+              "label": "Secret Access Key / SecretKey"
+            },
+            "secret_id": {
+              "label": "SecretId"
+            },
+            "secret_key": {
+              "label": "SecretKey"
+            },
+            "region": {
+              "label": "地域"
+            },
+            "instance_id": {
+              "label": "实例 ID"
+            },
+            "scheme": {
+              "label": "协议"
+            }
+          }
+        },
+        "com.dbx.plugin.imrepo.main": {
+          "label": "IMREPO"
+        }
+      }
+    }
+  }
+}

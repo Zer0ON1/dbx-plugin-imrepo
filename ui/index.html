@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IMREPO</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-icon" src="./assets/plugin.svg" alt="" />
+        <span class="brand-name">IMREPO</span>
+        <span class="brand-sub">Image Registry Studio</span>
+      </div>
+      <div class="conn" id="connInfo">
+        <span class="conn-status"></span>
+        <span class="conn-name">—</span>
+        <span class="conn-endpoint"></span>
+        <span class="conn-type badge" id="connType"></span>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-outline" id="btnLogs" title="操作日志">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M3 1.5h8.2L13.5 3.8V14.5H3V1.5Zm1.5 1.5v10h7.5V4.4L10.6 3H4.5Zm1.3 3h4.4v1.5H5.8V6Zm0 3h4.4v1.5H5.8V9Z"/></svg>
+          <span data-i18n="logs">日志</span>
+        </button>
+        <button class="btn btn-outline" id="btnRefresh" title="Refresh">
+          <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M13.6 2.3A7 7 0 1 0 15 8h-2a5 5 0 1 1-1.4-3.6L9.5 6.5H15V1z"/></svg>
+          <span data-i18n="refresh">刷新</span>
+        </button>
+        <button class="btn btn-outline" id="btnSettings" title="Settings">
+          <!-- sliders: unmistakable at 14px, unlike a gear whose teeth blur -->
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path fill="currentColor" d="M1.5 4.2h6.1v1.6H1.5zM11.3 4.2h3.2v1.6h-3.2z"/>
+            <path fill="currentColor" d="M1.5 10.2h3.2v1.6H1.5zM8.3 10.2h6.2v1.6H8.3z"/>
+            <circle cx="9.35" cy="5" r="1.85" fill="currentColor"/>
+            <circle cx="6.35" cy="11" r="1.85" fill="currentColor"/>
+          </svg>
+          <span data-i18n="settings">设置</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="body">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-tabs" id="sidebarTabs">
+          <button class="stab" data-tab="projects" data-i18n="stab.projects">项目</button>
+          <button class="stab" data-tab="overview" data-i18n="stab.overview">总览</button>
+        </div>
+        <div class="sidebar-search" id="sidebarSearch">
+          <input type="search" id="searchInput" data-i18n-placeholder="search" placeholder="搜索仓库 / 项目..." />
+        </div>
+        <div class="sidebar-title" id="treeTitle" data-i18n="explorer">资源浏览</div>
+        <nav class="tree" id="tree"></nav>
+        <div class="overview-list" id="overviewList" hidden></div>
+      </aside>
+
+      <main class="content">
+        <div class="content-toolbar" id="contentToolbar">
+          <div class="crumbs" id="crumbs"></div>
+          <div class="content-toolbar-actions">
+            <button class="btn btn-outline btn-sm" id="btnNewProject" title="新建项目">
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7.25 2h1.5v5.25H14v1.5H8.75V14h-1.5V8.75H2v-1.5h5.25V2Z"/></svg>
+              <span data-i18n="newProject">新建项目</span>
+            </button>
+            <button class="btn btn-outline btn-sm" id="btnCleanup" disabled
+                    title="清理无 Tag 的孤立镜像">
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6.5 1.5h3l.4 1.2H13v1.6H3V2.7h3.1l.4-1.2ZM4.1 5.8h7.8l-.55 7.6A1.5 1.5 0 0 1 9.85 14.8H6.15a1.5 1.5 0 0 1-1.5-1.4L4.1 5.8Z"/></svg>
+              <span data-i18n="cleanup">清理无 Tag</span>
+            </button>
+          </div>
+        </div>
+        <div class="content-body" id="contentBody">
+          <div class="empty-state" id="emptyState">
+            <img src="./assets/plugin.svg" alt="" class="empty-icon" />
+            <p data-i18n="empty.title">连接一个镜像仓库以开始浏览</p>
+            <p class="muted" data-i18n="empty.sub">在左侧选择项目或仓库，查看镜像 Tag、镜像层与安全漏洞报告</p>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Retag modal -->
+  <div class="modal-mask" id="retagModal" hidden>
+    <div class="modal">
+      <div class="modal-header"><h3 data-i18n="retag.title">重命名 Tag（Retag）</h3></div>
+      <div class="modal-body">
+        <label class="field"><span data-i18n="retag.repo">仓库</span><input id="retagRepo" readonly /></label>
+        <label class="field"><span data-i18n="retag.source">原 Tag</span><select id="retagSource"></select></label>
+        <label class="field"><span data-i18n="retag.target">新 Tag</span><input id="retagTarget" placeholder="v1.0.1" /></label>
+        <label class="check">
+          <input type="checkbox" id="retagDeleteSource" checked />
+          <span data-i18n="retag.deleteSource">同时删除原 Tag（完成重命名）</span>
+        </label>
+        <p class="hint" data-i18n="retag.hint">无需重新上传镜像层，仅将原 Manifest 以新 Tag 写回仓库。</p>
+        <p class="hint warn" id="retagNotice" data-i18n="retag.ociNotice" hidden>当前为通用 OCI v2 仓库：只能新增 Tag，原 Tag 需手动删除。</p>
+        <p class="hint warn" id="retagProtect" hidden></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="retagModal" data-i18n="cancel">取消</button>
+        <button class="btn btn-primary" id="btnRetagConfirm" data-i18n="retag.confirm">确认重命名</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete modal -->
+  <div class="modal-mask" id="deleteModal" hidden>
+    <div class="modal">
+      <div class="modal-header"><h3 data-i18n="delete.title">删除确认</h3></div>
+      <div class="modal-body">
+        <p id="deleteMsg"></p>
+        <p class="hint warn" data-i18n="delete.hint">删除为软删除（解除 Tag 与 Manifest 绑定），空间回收需仓库侧执行 GC。</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="deleteModal" data-i18n="cancel">取消</button>
+        <button class="btn btn-danger" id="btnDeleteConfirm" data-i18n="delete.confirm">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Layers modal -->
+  <div class="modal-mask" id="layersModal" hidden>
+    <div class="modal modal-wide">
+      <div class="modal-header"><h3 data-i18n="layers.title">镜像层解析</h3></div>
+      <div class="modal-body" id="layersBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="layersModal" data-i18n="close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vulnerability modal -->
+  <div class="modal-mask" id="vulnModal" hidden>
+    <div class="modal modal-wide">
+      <div class="modal-header"><h3 data-i18n="vuln.title">安全漏洞报告 (CVE)</h3></div>
+      <div class="modal-body" id="vulnBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="vulnModal" data-i18n="close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pull commands modal -->
+  <div class="modal-mask" id="pullModal" hidden>
+    <div class="modal modal-xwide">
+      <div class="modal-header"><h3 data-i18n="pull.title">拉取命令</h3></div>
+      <div class="modal-body" id="pullBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="pullModal" data-i18n="close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Untagged artifact cleanup modal -->
+  <div class="modal-mask" id="cleanupModal" hidden>
+    <div class="modal modal-xwide">
+      <div class="modal-header"><h3 data-i18n="cleanup.title">清理无 Tag 的孤立镜像</h3></div>
+      <div class="modal-body" id="cleanupBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="cleanupModal" data-i18n="cancel">取消</button>
+        <button class="btn btn-danger" id="btnCleanupConfirm" disabled>清理选中</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings: cleanup rules, retention, scanner, about -->
+  <div class="modal-mask" id="settingsModal" hidden>
+    <div class="modal modal-xwide">
+      <div class="modal-header"><h3 data-i18n="settings.title">设置</h3></div>
+      <div class="modal-body" id="settingsBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btnSettingsReset" data-i18n="settings.reset">恢复默认</button>
+        <button class="btn btn-ghost" data-close="settingsModal" data-i18n="cancel">取消</button>
+        <button class="btn btn-primary" id="btnSettingsSave" data-i18n="settings.save">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-mask" id="projectSettingsModal" hidden>
+    <div class="modal modal-xwide">
+      <div class="modal-header"><h3 data-i18n="project.settings">项目设置</h3></div>
+      <div class="modal-body" id="projectSettingsBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="projectSettingsModal" data-i18n="close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audit logs -->
+  <div class="modal-mask" id="logsModal" hidden>
+    <div class="modal modal-xwide">
+      <div class="modal-header"><h3 data-i18n="logs.title">操作日志</h3></div>
+      <div class="modal-body" id="logsBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="logsModal" data-i18n="close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create project -->
+  <div class="modal-mask" id="createProjectModal" hidden>
+    <div class="modal">
+      <div class="modal-header"><h3 data-i18n="np.title">新建项目</h3></div>
+      <div class="modal-body">
+        <label class="field"><span data-i18n="np.name">项目名称</span><input id="newProjectName" placeholder="my-project" autocomplete="off" /></label>
+        <p class="hint" data-i18n="np.nameHint">小写字母、数字与 . _ - 组成，以字母或数字开头。</p>
+        <label class="field"><span data-i18n="project.accessLevel">访问级别</span><span id="newProjectAccess"></span></label>
+        <p class="hint" data-i18n="project.accessDesc">公开项目任何人可拉取；私有项目需登录认证。</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="createProjectModal" data-i18n="cancel">取消</button>
+        <button class="btn btn-primary" id="btnCreateProjectConfirm" data-i18n="np.create">创建项目</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

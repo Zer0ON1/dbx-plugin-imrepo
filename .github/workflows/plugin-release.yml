@@ -1,0 +1,72 @@
+name: Release DBX plugin
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  # Windows package is produced by the official CLI on a Windows runner (the
+  # CLI refuses to cross-compile, so each OS builds its own host target).
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - run: npm install --no-audit --no-fund @dbx-app/plugin-cli@0.1.9
+      - run: npx --no-install @dbx-app/plugin-cli package .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: |
+            dist/*-windows-x64.dbxp
+            dist/*-windows-x64.artifact.json
+
+  # Linux packages are assembled by tools/build-linux.py with a statically
+  # linked (CGO_ENABLED=0) Go sidecar, so they run on older distros such as
+  # Kylin V10 (low glibc). One x64 runner cross-compiles both arches.
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - run: npm install --no-audit --no-fund @dbx-app/plugin-cli@0.1.9
+      - name: Build linux-x64 + linux-arm64 (static)
+        env:
+          DBX_PLUGIN_SDK_ROOT: ${{ github.workspace }}/node_modules/@dbx-app/plugin-cli/sdk-root/plugins/sdk/go/dbx-plugin-sdk
+        run: python3 tools/build-linux.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-package
+          path: |
+            dist/*-linux-x64.dbxp
+            dist/*-linux-x64.artifact.json
+            dist/*-linux-arm64.dbxp
+            dist/*-linux-arm64.artifact.json
+
+  release:
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Upload packages to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          find artifacts -name '*.dbxp' -o -name '*.artifact.json' | while read f; do
+            gh release upload "${{ github.event.release.tag_name }}" "$f"
+          done

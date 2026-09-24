@@ -1,0 +1,352 @@
+#!/usr/bin/env python3
+"""Headless regression test for the workbench UI (rendered in a real browser).
+
+Renders the real workbench (generated preview harness) in a headless browser and
+asserts on the resulting DOM. Covers things that are easy to regress and painful
+to notice by hand:
+
+  A  race     — clicking repository A (slow) and then B (fast) must end up showing
+                B. Without a sequence guard, A's late response paints A's
+                artifacts under B's name.
+  B  spinner  — while a repository is loading, the content pane shows a spinner and
+                the clicked sidebar row shows its own spinner.
+  C  prefetch — expanding a project warms repositories in the background, and
+                clicking a warmed repository renders without a second request.
+  D  cleanup   — the untagged-cleanup dialog lists what it found, reports the scan,
+                and keeps its destructive button disabled when nothing is selected.
+  E  cleanup   — with no selection there is no way to trigger a deletion.
+
+Run:  python tools/test-ui-e2e.py      (exit 0 = all pass; skips if no browser)
+"""
+
+from __future__ import annotations
+
+import glob
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+PREVIEW = ROOT / ".preview" / "preview.html"
+SLOW = "ledger-api"      # deliberately delayed repository
+FAST = "audit-api"            # answers immediately
+
+EDGE_CANDIDATES = [
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    "/usr/bin/microsoft-edge",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+]
+
+failures: list[str] = []
+checks_run = 0
+
+
+def check(label: str, ok: bool, detail: str = "") -> None:
+    # Total is counted here so the run reports how many assertions really executed.
+    global checks_run
+    checks_run += 1
+    print(f"  [{'PASS' if ok else 'FAIL'}] {label}" + (f"\n        {detail}" if detail and not ok else ""))
+    if not ok:
+        failures.append(label)
+
+
+def find_browser() -> str | None:
+    for path in EDGE_CANDIDATES:
+        if pathlib.Path(path).exists():
+            return path
+    for name in ("microsoft-edge", "chromium", "google-chrome", "chrome"):
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
+class Browser:
+    def __init__(self, exe: str, workdir: pathlib.Path):
+        self.exe = exe
+        self.workdir = workdir
+        self.runs = 0
+
+    def dom(self, query: str, budget_ms: int) -> str:
+        """Loads preview.html?<query> and returns the DOM at `budget_ms` of virtual time."""
+        self.runs += 1
+        profile = self.workdir / f"p{self.runs}"
+        url = f"file:///{PREVIEW.as_posix()}?{query}"
+        proc = subprocess.run(
+            [
+                self.exe, "--headless=new", "--disable-gpu", "--no-sandbox",
+                "--hide-scrollbars", "--force-device-scale-factor=1",
+                "--window-size=1360,880",
+                f"--virtual-time-budget={budget_ms}",
+                f"--user-data-dir={profile}",
+                "--dump-dom", url,
+            ],
+            capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=180,
+        )
+        return proc.stdout or ""
+
+
+def probe_requests(dom: str) -> list[str]:
+    m = re.search(r'id="__probe"[^>]*>([^<]*)<', dom)
+    return [x for x in (m.group(1) if m else "").split(",") if x]
+
+
+def main() -> int:
+    if not PREVIEW.exists():
+        sys.exit("preview harness missing — run: python tools/make-preview.py")
+    exe = find_browser()
+    if not exe:
+        print("no Chromium-based browser found (Edge/Chrome); skipping.")
+        return 0
+    print(f"browser: {exe}")
+    print(f"harness: {PREVIEW.relative_to(ROOT)}")
+
+    work = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-loading-"))
+    browser = Browser(exe, work)
+
+    try:
+        print("\nA) click a slow repository, then a fast one → the fast one wins")
+        # Slow repo first at t=700ms, fast one at t=1100ms; the slow response lands
+        # at ~3.2s, i.e. long after the selection moved on.
+        query = f"theme=light&probe=1&slowrepo={SLOW}&slowms=2500&race={SLOW}"
+        dom = browser.dom(query, 8000)
+        check("fast repository's artifacts are shown", f"{FAST}-1" in dom,
+              "expected a tag belonging to " + FAST)
+        check("slow repository's artifacts are NOT shown", f"{SLOW}-1" not in dom,
+              "stale response painted over the newer view")
+        check("breadcrumb shows the fast repository",
+              f'<span class="current">{FAST}</span>' in dom)
+        check("fast repository row is the active one",
+              re.search(rf'class="tree-item lvl2 active"[^>]*>(?:(?!</div>).)*?{FAST}', dom, re.S) is not None)
+
+        print("\nB) while loading: content spinner + per-row spinner")
+        # Freeze just after the slow click (t=700ms), before its response.
+        dom_mid = browser.dom(f"theme=light&probe=1&slowrepo={SLOW}&slowms=2500&race={SLOW}", 900)
+        check("content pane shows a loading spinner", 'class="loading"' in dom_mid, dom_mid[-400:])
+        row = re.search(rf'<div class="tree-item lvl2"(?![^>]*hidden)[^>]*data-key="[^"]*{SLOW}"[^>]*>(.*?)</div></div>', dom_mid, re.S)
+        if row is None:
+            # fall back to a looser match: the slow row must not carry a hidden spinner
+            loose = re.search(rf'data-key="[^"]*{SLOW}"(.{{0,600}})', dom_mid, re.S)
+            check("loading row has a visible spinner",
+                  loose is not None and 'class="row-spinner" hidden' not in loose.group(1),
+                  loose.group(1)[:200] if loose else "row not found")
+        else:
+            check("loading row has a visible spinner", 'row-spinner" hidden' not in row.group(1))
+
+        print("\nC) expanding a project prefetches repositories; a warmed click is a cache hit")
+        # Click docs-api at t=4s, long after the prefetch pass finished.
+        dom = browser.dom("theme=light&probe=1&clickrepo=docs-api", 7000)
+        reqs = probe_requests(dom)
+        warmed = [r for r in reqs if r.startswith("harbor/artifacts:")]
+        check("background prefetch requested repository listings", len(warmed) >= 3,
+              f"only {len(warmed)} artifact listing(s): {reqs[:12]}")
+        check("prefetch is bounded (does not scan the whole project)", len(warmed) <= 6,
+              f"{len(warmed)} listings requested")
+        check("no repository listing was requested twice",
+              len(warmed) == len(set(warmed)), f"duplicates in {warmed}")
+        check("clicking a warmed repository served it from cache (single request)",
+              warmed.count("harbor/artifacts:docs-api") == 1,
+              f"requests: {warmed}")
+        check("the warmed repository's artifacts are on screen", "docs-api-1" in dom)
+        check("the tree shows no spinner once everything settled", 'class="row-spinner"' not in dom or
+              'row-spinner" hidden' in dom)
+        print("\nD) cleanup dialog lists what the scan found")
+        dom = browser.dom("theme=light&modal=cleanup", 4000)
+        rows = len(re.findall(r'digest-cell', dom))
+        check("lists one row per untagged artifact", rows == 4, f"{rows} row(s)")
+        check("reports scanned repositories from the scan payload",
+              "已扫描仓库: 9/9" in dom, "summary missing the scanned count")
+        check("reports the reclaimable size", "可回收" in dom)
+        check("warns that deletion is a soft delete needing GC", "软删除" in dom)
+        check("confirm button reflects the selection count", "清理选中 (4)" in dom)
+        # A missing i18n key renders as its literal name in the table header.
+        check("no untranslated key in the table header", "cleanup.repository" not in dom)
+
+        print("\nE) with nothing selected, deletion cannot be triggered")
+        dom = browser.dom("theme=light&modal=cleanup&uncheckall=1", 4000)
+        # Two traps here: --dump-dom serialises HTML attributes, and for a checkbox the
+        # `checked` attribute mirrors defaultChecked, not the live state — so counting
+        # "checked" strings would assert nothing. The button's state is derived from the
+        # live selection, and a marker proves the driver really ran.
+        check("the uncheck driver actually ran",
+              'data-probe-uncheck="1"' in dom, "driver did not run (marker missing)")
+        m = re.search(r'<button class="btn btn-danger" id="btnCleanupConfirm"[^>]*>([^<]*)', dom)
+        check("confirm button is disabled", m is not None and "disabled" in m.group(0),
+              m.group(0) if m else "button not found")
+        check("confirm button no longer shows a count",
+              m is not None and "(" not in m.group(1), m.group(1) if m else "")
+
+        print("\nF) the settings panel")
+        dom = browser.dom("theme=light&modal=settings", 5000)
+        check("the modal opens from the toolbar button", 'id="settingsModal"' in dom and 'id="settingsBody"' in dom)
+        # Since v1.5.0 the scanner policy is per project; since v1.7.0 the
+        # global panel keeps only the account-level sections (no diagnostics).
+        check("global panel keeps users + about, drops scanner & diagnostics",
+              all(k in dom for k in ("用户管理", "关于 IMREPO"))
+              and "镜像扫描器" not in dom and "扫描数据源" not in dom and "连接诊断" not in dom,
+              "a section is present or absent unexpectedly")
+        # Match the version by shape (x.y.z), never by a literal prefix — a
+        # hardcoded "1.2." broke the moment the plugin moved to 1.3.0.
+        check("About shows the plugin version and id",
+              bool(re.search(r"\b\d+\.\d+\.\d+\b", dom)) and "com.dbx.plugin.imrepo" in dom)
+        check("the GitHub link shows a placeholder instead of a dead link",
+              "待补充" in dom and "settings.github" not in dom)
+        check("the settings file path is shown", "settings.json" in dom)
+        check("user management offers create / change-password / delete",
+              "创建用户" in dom and "修改密码" in dom and "删除" in dom)
+        check("an admin sees the set-admin switch on each row",
+              "set-switch" in dom and "设为管理员" in dom, "admin toggle missing")
+        dom = browser.dom("theme=light&modal=settings&meadmin=0", 6000)
+        check("a non-admin sees only their own profile and no create-user",
+              "仅显示本人信息" in dom and "developer1" in dom and "创建用户" not in dom
+              and "设为管理员" not in dom, "non-admin user panel leaked management UI")
+
+        print("\nF3) the project settings dialog (access level, quota, per-project scanner)")
+        dom = browser.dom("theme=light&projectsettings=1", 6000)
+        check("the project dialog opens", 'id="projectSettingsBody"' in dom and "访问级别" in dom,
+              "dialog did not render")
+        check("the access level is a slider, not a checkbox switch",
+              "acc-slider" in dom and "私有" in dom and "公开" in dom, "slider missing")
+        check("the quota section shows usage against the cap",
+              "项目配额" in dom and "已用空间" in dom and "不设限" in dom, "quota section missing")
+        check("vulnerability scanning moved into the project dialog",
+              "漏洞扫描（本项目）" in dom and "扫描数据源" in dom and "保存项目扫描设置" in dom,
+              "per-project scanner section missing")
+
+        print("\nF4) the Harbor apply gate moved with the scanner")
+        dom = browser.dom("theme=light&projectsettings=1", 6000)
+        m = re.search(r'<button class="btn btn-outline btn-sm" id="btnApplyScanner"[^>]*>', dom)
+        check("the Harbor apply button exists in the project dialog", m is not None, "button not found")
+        check("...and is disabled while there is nothing to write",
+              m is not None and "disabled" in m.group(0), m.group(0) if m else "")
+        check("Harbor's live configuration is shown, not guessed",
+              "跟随系统默认" in dom and "severity" in dom)
+
+        dom = browser.dom("theme=light&projectsettings=1&armapply=1", 9000)
+        check("arming the apply shows the confirmation label",
+              "再点一次确认写入" in dom, "the two-step apply did not arm")
+        check("...and lists exactly what would be written",
+              "auto_scan → true" in dom, "the pending-write summary is missing")
+
+        print("\nF5) the overview tab, the audit logs, and project creation")
+        dom = browser.dom("theme=light&overviewtab=1", 6000)
+        check("the overview tab shows the totals in the content pane",
+              "仓库总览" in dom and "总空间" in dom and "90.1 GB" in dom, "overview totals missing")
+        check("the overview tab lists recent + most-pulled projects in the sidebar",
+              "最近新建的项目" in dom and "拉取最多的项目" in dom
+              and "ov-project-link" in dom, "overview link lists missing")
+        check("the pull window selector offers 1/3/7 days",
+              "近 1 天" in dom and "近 3 天" in dom and "近 7 天" in dom, "window selector missing")
+        check("the selected window shows its pull count", "128" in dom, "pull count missing")
+        check("the overview renders storage + pull charts",
+              "项目存储分布" in dom and "ov-chart" in dom, "overview charts missing")
+        dom = browser.dom("theme=light&overviewtab=1&overviewlink=1", 7000)
+        check("clicking an overview link switches to the projects tab and expands the project",
+              "最近新建的项目" in dom and "ledger-api" in dom
+              and "payments" in dom, "overview link did not locate the project")
+        dom = browser.dom("theme=light&openlogs=1", 6000)
+        check("the logs modal lists entries with operation badges",
+              'id="logsModal"' in dom and "操作日志" in dom
+              and "log-op-pull" in dom and "log-op-delete" in dom, "log table missing")
+        check("the log scope offers global and the current project",
+              "全局" in dom and "payments" in dom, "scope selector missing")
+        dom = browser.dom("theme=light&newproject=1", 6000)
+        check("the create-project dialog offers name + access slider",
+              "新建项目" in dom and 'id="newProjectName"' in dom and "acc-slider" in dom,
+              "create dialog missing")
+        dom = browser.dom("theme=light&keeptagged=1", 6000)
+        check("the breadcrumb project segment is clickable (same color, underlined)",
+              'class="crumb-link"' in dom and ">payments</a>" in dom, "crumb link missing")
+        check("the list/card view toggle is gone",
+              'id="btnCards"' not in dom and 'id="btnList"' not in dom, "toggle still present")
+
+        print("\nF6) a plain Docker Registry v2 shows namespaces as projects")
+        dom = browser.dom("theme=light&mode=docker", 6000)
+        check("docker-v2 groups the catalog into namespace folders",
+              "team-alpha" in dom and "team-beta" in dom and "nginx" in dom,
+              "namespace folders missing")
+        m = re.search(r'<button[^>]*id="btnNewProject"[^>]*>', dom)
+        check("docker-v2 hides the Harbor-only new-project button",
+              m is not None and "hidden" in m.group(0), "new-project button not hidden in docker mode")
+        dom = browser.dom("theme=light&mode=docker&overviewtab=1", 6000)
+        check("docker-v2 overview shows the namespace storage chart",
+              "命名空间存储分布" in dom and "ov-chart" in dom, "v2 overview chart missing")
+        check("docker-v2 overview has no pull window (no audit log)",
+              "近 1 天" not in dom, "pull window leaked into the v2 overview")
+
+        print("\nG) the global settings still save the connection-level policy")
+        # The global panel no longer edits scanner values, but the save flow and
+        # its round-trip through settings/set must keep working.
+        dom = browser.dom("theme=light&modal=settings&confirmsave=1", 6000)
+        check("saving reports success", "设置已保存" in dom or "Settings saved" in dom,
+              "no saved toast")
+
+        print("\nH) the settings are visible where they matter")
+        dom = browser.dom("theme=light&keeptagged=1&protect=ledger-api-2", 5000)
+        check("artifacts outside the retention window are marked",
+              "超出保留策略" in dom, "no retention marker")
+        check("a protected tag is marked on the chip itself",
+              "tag-chip mono protected" in dom, "no protected chip")
+        check("...and its delete action is visibly blocked",
+              'icon-btn danger blocked' in dom, "the delete action is not marked")
+
+        dom = browser.dom("theme=light&modal=cleanup&rules=1", 5000)
+        check("the cleanup dialog names the rules that produced the list",
+              "保留最近 1 个" in dom and "排除 doc-*" in dom, "no rule summary")
+        check("rule-protected rows are offered but disabled",
+              dom.count('type="checkbox" disabled') >= 1, "no disabled row")
+        check("...with the reason spelled out", "is excluded by rule" in dom or "newest untagged" in dom)
+        check("the confirm count only counts the eligible rows",
+              "清理选中 (2)" in dom, "the confirm count is wrong")
+        check("protected rows are reported in the summary", "受保护: 2" in dom)
+
+        dom = browser.dom("theme=light&modal=vuln&threshold=medium", 5000)
+        check("the CVE panel shows the configured threshold", "阈值: medium" in dom, "no threshold line")
+        check("...and whether the report reaches it", "已达阈值" in dom or "未达阈值" in dom)
+        check("the panel offers a fresh read and a trigger",
+              "刷新报告" in dom and "触发扫描" in dom)
+
+        print("\nI) clicking a project folder shows the project-wide image overview")
+        dom = browser.dom("theme=light&overview=1", 6000)
+        check("the four totals are shown",
+              all(k in dom for k in ("镜像数", "总大小", "仓库数", "Tag 数")), "a stat card is missing")
+        check("the totals come from the aggregated payload",
+              '>10</span>' in dom and "3.6 GB" in dom, "totals do not match the mock data")
+        check("the table is image-first: no tag column", "<th>Tag</th>" not in dom,
+              "a tag column leaked into the overview")
+        check("a chart-typed image is labelled", "CHART" in dom, "non-IMAGE type badge missing")
+        check("rows offer rename + vuln instead of pull/layers",
+              'aria-label="重命名 Tag"' in dom and 'aria-label="漏洞"' in dom
+              and 'aria-label="拉取命令"' not in dom and 'aria-label="镜像层"' not in dom)
+        check("a tag-count column is shown", "<th>Tag 数</th>" in dom, "no tag-count column")
+        check("architectures render as one badge per arch",
+              "arch-badge" in dom and "amd64" in dom and "arm64" in dom, "arch badges missing")
+        check("the repository name is a way into the repository view", "repo-link" in dom,
+              "no clickable repository link")
+
+        print("\nJ) a v2 tag table lazily shows each tag's architectures")
+        dom = browser.dom("theme=light&mode=docker", 8000)
+        check("the tag table opens under a namespace",
+              "team-alpha" in dom and "tag-chip" in dom, "tag table missing")
+        check("each tag shows its arch badges",
+              "arch-badge" in dom and "amd64" in dom and "arm64" in dom, "tag arch badges missing")
+
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+    print()
+    if failures:
+        print(f"RESULT: {len(failures)} of {checks_run} CHECK(S) FAILED")
+        for f in failures:
+            print("  -", f)
+        return 1
+    print(f"RESULT: ALL PASS ({checks_run} checks)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
