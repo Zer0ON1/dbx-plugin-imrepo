@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -280,19 +279,10 @@ func registryOverview(ctx context.Context, s *Session, params map[string]any) (a
 		err   error
 	}
 	results := make([]projRepos, len(projects))
-	sem := make(chan struct{}, 4)
-	var wg sync.WaitGroup
-	for i := range projects {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			repos, err := s.Harbor.Repositories(ctx, projects[i].Name)
-			results[i] = projRepos{name: projects[i].Name, repos: repos, err: err}
-		}(i)
-	}
-	wg.Wait()
+	poolMap(4, len(projects), func(i int) {
+		repos, err := s.Harbor.Repositories(ctx, projects[i].Name)
+		results[i] = projRepos{name: projects[i].Name, repos: repos, err: err}
+	})
 
 	type job struct {
 		project string
@@ -313,23 +303,14 @@ func registryOverview(ctx context.Context, s *Session, params map[string]any) (a
 	const overviewWorkers = 6
 	pages := make([][]HarborArtifact, len(jobs))
 	errMsgs := make([]string, len(jobs))
-	wsem := make(chan struct{}, overviewWorkers)
-	var wwg sync.WaitGroup
-	for i := range jobs {
-		wwg.Add(1)
-		go func(i int) {
-			defer wwg.Done()
-			wsem <- struct{}{}
-			defer func() { <-wsem }()
-			arts, err := s.Harbor.Artifacts(ctx, jobs[i].project, jobs[i].repo.Name)
-			if err != nil {
-				errMsgs[i] = fmt.Sprintf("%s/%s: %v", jobs[i].project, jobs[i].repo.Name, err)
-				return
-			}
-			pages[i] = arts
-		}(i)
-	}
-	wwg.Wait()
+	poolMap(overviewWorkers, len(jobs), func(i int) {
+		arts, err := s.Harbor.Artifacts(ctx, jobs[i].project, jobs[i].repo.Name)
+		if err != nil {
+			errMsgs[i] = fmt.Sprintf("%s/%s: %v", jobs[i].project, jobs[i].repo.Name, err)
+			return
+		}
+		pages[i] = arts
+	})
 
 	repoErrSeen := map[string]bool{}
 	sizeByProject := map[string]int64{}

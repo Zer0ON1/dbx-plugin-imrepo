@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -120,15 +119,15 @@ type HarborReference struct {
 }
 
 type HarborArtifact struct {
-	ID        int64             `json:"id"`
-	Type      string            `json:"type"`
-	Digest    string            `json:"digest"`
-	Size      int64             `json:"size"`
-	PushTime  string            `json:"push_time"`
-	PullTime  string            `json:"pull_time"`
-	MediaType string            `json:"media_type"`
-	Tags      []HarborTag       `json:"tags"`
-	Platform  *HarborPlatform   `json:"platform"`
+	ID         int64             `json:"id"`
+	Type       string            `json:"type"`
+	Digest     string            `json:"digest"`
+	Size       int64             `json:"size"`
+	PushTime   string            `json:"push_time"`
+	PullTime   string            `json:"pull_time"`
+	MediaType  string            `json:"media_type"`
+	Tags       []HarborTag       `json:"tags"`
+	Platform   *HarborPlatform   `json:"platform"`
 	References []HarborReference `json:"references"`
 }
 
@@ -223,23 +222,14 @@ func mgmtErr(what string, code int, data []byte, err error) error {
 func (h *HarborClient) artifactPages(ctx context.Context, project string, repos []HarborRepository, workers int) ([][]HarborArtifact, []string) {
 	pages := make([][]HarborArtifact, len(repos))
 	errMsgs := make([]string, len(repos))
-	sem := make(chan struct{}, workers)
-	var wg sync.WaitGroup
-	for i := range repos {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			arts, err := h.Artifacts(ctx, project, repos[i].Name)
-			if err != nil {
-				errMsgs[i] = fmt.Sprintf("%s: %v", repos[i].Name, err)
-				return
-			}
-			pages[i] = arts
-		}(i)
-	}
-	wg.Wait()
+	poolMap(workers, len(repos), func(i int) {
+		arts, err := h.Artifacts(ctx, project, repos[i].Name)
+		if err != nil {
+			errMsgs[i] = fmt.Sprintf("%s: %v", repos[i].Name, err)
+			return
+		}
+		pages[i] = arts
+	})
 	return pages, errMsgs
 }
 
@@ -733,16 +723,16 @@ func (h *HarborClient) ProjectImages(ctx context.Context, project string, maxRep
 			for _, t := range a.Tags {
 				tags = append(tags, t.Name)
 			}
-		out.Images = append(out.Images, ProjectImage{
-			Repository: repos[i].Name,
-			Digest:     a.Digest,
-			Type:       a.Type,
-			Size:       a.Size,
-			PushTime:   a.PushTime,
-			Tags:       tags,
-			Arches:     a.arches(),
-			TagCount:   len(tags),
-		})
+			out.Images = append(out.Images, ProjectImage{
+				Repository: repos[i].Name,
+				Digest:     a.Digest,
+				Type:       a.Type,
+				Size:       a.Size,
+				PushTime:   a.PushTime,
+				Tags:       tags,
+				Arches:     a.arches(),
+				TagCount:   len(tags),
+			})
 			out.TagCount += len(tags)
 		}
 	}
@@ -782,22 +772,6 @@ func (h *HarborClient) TriggerScan(ctx context.Context, project, repo, reference
 // done before writes ("先读已有，后写改动") so an update never blind-overwrites
 // state the plugin does not understand.
 // ---------------------------------------------------------------------------
-
-const (
-	roleProjectAdmin = 1
-	roleDeveloper    = 2
-	roleGuest        = 3
-	roleMaintainer   = 4
-	roleLimitedGuest = 5
-)
-
-var roleNames = map[int]string{
-	roleProjectAdmin: "Project Admin",
-	roleDeveloper:    "Developer",
-	roleGuest:        "Guest",
-	roleMaintainer:   "Maintainer",
-	roleLimitedGuest: "Limited Guest",
-}
 
 // HarborMember is one project member (a user granted a role on the project).
 type HarborMember struct {

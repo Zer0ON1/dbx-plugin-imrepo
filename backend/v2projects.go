@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 )
 
 // ---------------------------------------------------------------------------
@@ -142,43 +141,34 @@ type v2RepoResult struct {
 // are counted once. Per-repo failures are reported, not fatal.
 func (c *OciClient) walkV2Repos(ctx context.Context, refs []v2RepoRef) []v2RepoResult {
 	results := make([]v2RepoResult, len(refs))
-	sem := make(chan struct{}, v2WalkWorkers)
-	var wg sync.WaitGroup
-	for i := range refs {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			tags, err := c.Tags(ctx, refs[i].full)
+	poolMap(v2WalkWorkers, len(refs), func(i int) {
+		tags, err := c.Tags(ctx, refs[i].full)
+		if err != nil {
+			results[i].err = err
+			return
+		}
+		if len(tags) > v2MaxTagsPerRepo {
+			tags = tags[:v2MaxTagsPerRepo]
+		}
+		results[i].ref = refs[i]
+		results[i].tagCount = len(tags)
+		seen := map[string]bool{}
+		for _, tg := range tags {
+			dg, size, err := c.manifestInfo(ctx, refs[i].full, tg)
 			if err != nil {
-				results[i].err = err
-				return
+				continue // an unreadable tag is skipped, never fatal to the repo
 			}
-			if len(tags) > v2MaxTagsPerRepo {
-				tags = tags[:v2MaxTagsPerRepo]
+			if dg == "" {
+				dg = "sha256:" + tg
 			}
-			results[i].ref = refs[i]
-			results[i].tagCount = len(tags)
-			seen := map[string]bool{}
-			for _, tg := range tags {
-				dg, size, err := c.manifestInfo(ctx, refs[i].full, tg)
-				if err != nil {
-					continue // an unreadable tag is skipped, never fatal to the repo
-				}
-				if dg == "" {
-					dg = "sha256:" + tg
-				}
-				if seen[dg] {
-					continue
-				}
-				seen[dg] = true
-				results[i].size += size
+			if seen[dg] {
+				continue
 			}
-			results[i].imageCount = len(seen)
-		}(i)
-	}
-	wg.Wait()
+			seen[dg] = true
+			results[i].size += size
+		}
+		results[i].imageCount = len(seen)
+	})
 	return results
 }
 

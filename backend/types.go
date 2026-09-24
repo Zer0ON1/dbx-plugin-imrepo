@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 )
 
@@ -21,21 +20,12 @@ type Connection struct {
 	Port     int    `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
-	Database string `json:"database"`
 	// Legacy shapes (accepted, never sent by the host).
 	Config map[string]any    `json:"config"`
 	Secret map[string]string `json:"secret"`
 	// The real host shapes.
 	ExternalConfig    map[string]any    `json:"external_config"`
 	ConnectionSecrets map[string]string `json:"connection_secrets"`
-
-	Runtime RuntimeInfo `json:"runtime,omitempty"`
-}
-
-// RuntimeInfo carries the tunnel/proxy-transformed endpoint.
-type RuntimeInfo struct {
-	Host string `json:"host"`
-	Port int    `json:"port"`
 }
 
 // lookupAny fetches a non-nil entry from a config-ish map.
@@ -155,5 +145,3 @@ func (c *Connection) registryType() string {
 	}
 	return t
 }
-
-func connError(msg string) error { return fmt.Errorf("%s", msg) }
