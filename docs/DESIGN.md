@@ -62,7 +62,7 @@ req = '{"jsonrpc":"2.0","id":1,"method":"plugin/initialize","params":{"host":{"p
 print(subprocess.run(['/tmp/sidecar'], input=req, capture_output=True, text=True).stdout)
 PY
 # → {"id":1,"jsonrpc":"2.0","result":{"capabilities":["connections"],
-#     "plugin":{"id":"com.leavingrain.imrepo","version":"0.1.0"},"protocolVersion":1}}
+#     "plugin":{"id":"com.leavingrain.imrepo","version":"0.1.1"},"protocolVersion":1}}
 ```
 
 ### 翻译门禁（防"界面上显示键名"）

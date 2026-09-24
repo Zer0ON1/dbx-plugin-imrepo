@@ -4,6 +4,33 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
+## 0.1.1
+
+**The plugin itself is unchanged** — the packaged manifest, UI and sidecar are
+identical to 0.1.0 apart from the version string. The release exists because
+0.1.0 could not be validated: its CI runs failed in the test harness (a Windows
+console that cannot print the arrows the suites use, and a macOS path assumption
+in one settings assertion), so only Linux had actually been exercised, and its
+tag was locked against being moved once the release was published. Publishing
+the same plugin from a commit whose Windows and macOS runs pass is the honest
+fix; rewriting a published tag is not.
+
+What changed around the plugin:
+
+- The test harness runs on all three platforms: stdout is forced to UTF-8, and
+  the credentials check derives the config directory from the sidecar instead of
+  rebuilding a path that only holds on two of the three.
+- Every CI runner installs the same `chrome-headless-shell` instead of borrowing
+  the host's Chrome or Edge, where a full browser under `--headless=new` wrote
+  no DOM and never exited. The UI suite now fails rather than skips when no
+  browser is present, and validates the DOM it gets — an empty document would
+  have satisfied every "X is not in dom" assertion.
+- New gate: `tools/check-browser-baseline.py` holds the UI to **Chrome 109**,
+  DBX's oldest supported engine. CSS has no feature detection, so a newer
+  property is dropped silently on an older one.
+- The CI matrix builds once and tests the same artifacts on ubuntu, windows and
+  macOS; the Go and npm caches are actually enabled (both were silently off).
+
 ## 0.1.0
 
 The first public release. It is the codebase that internal iteration had taken
