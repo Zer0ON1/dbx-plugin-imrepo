@@ -7,6 +7,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Attach packages to this existing release tag (leave blank for a test-only run)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -164,10 +169,14 @@ jobs:
   release:
     name: Attach packages to the release
     needs: [build, test, gates]
-    if: github.event_name == 'release'
+    # Normally fired by publishing a release. The manual path exists because a
+    # failed attach otherwise leaves no way to retry without cutting a release.
+    if: github.event_name == 'release' || inputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -180,6 +189,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # --repo is required: this job has no checkout, so gh cannot find a git
+          # remote to infer the repository from and fails with "not a git
+          # repository". It did exactly that on the first release.
           find artifacts -type f \( -name '*.dbxp' -o -name 'release-candidates.json' \) | while read -r f; do
-            gh release upload "${{ github.event.release.tag_name }}" "$f" --clobber
+            gh release upload "$RELEASE_TAG" "$f" --repo "${{ github.repository }}" --clobber
           done
