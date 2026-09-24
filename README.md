@@ -16,8 +16,10 @@
 2. 在 DBX 插件中心开启**「允许安装未签名开发包」**（当前是未签名候选包，见[发布](#发布)）。
 3. 新建连接，选仓库类型（Harbor / Docker Registry v2 / 云厂商托管 …），填地址与认证方式。
 
-Sidecar 是**静态链接**的 Go 二进制（`CGO_ENABLED=0`），不依赖目标机 libc —— 已在麒麟 V10
-（aarch64 / glibc 2.28 / 内核 4.19）上实测通过。
+Sidecar 是**静态链接**的 Go 二进制（`CGO_ENABLED=0`），不依赖目标机 libc。CI 在
+**ubuntu / windows / macos 三个真实 runner** 上各自跑一遍完整测试套件（测的就是发布用的那批字节），
+Linux 侧另有麒麟 V10（aarch64 / glibc 2.28 / 内核 4.19）真机复验。细节见
+[`docs/DESIGN.md` 的平台支持一节](docs/DESIGN.md#平台支持)。
 
 ## 功能
 
@@ -46,7 +48,7 @@ Sidecar 是**静态链接**的 Go 二进制（`CGO_ENABLED=0`），不依赖目�
 npm install                 # 插件 CLI（自带与本版本匹配的 Go SDK）
 npm run package             # 交叉编译六个平台 → dist/*.dbxp + release-candidates.json
 npm run preview             # 生成验证台 .preview/preview.html
-npm test                    # 全量：5 套端到端 + 配色门禁 + 翻译门禁
+npm test                    # 全量：包门禁 + 5 套端到端 + 配色门禁 + 翻译门禁
 
 npx dbx-plugin dev --path . --port 5190      # 本地调试宿主 → http://127.0.0.1:5190/
 ```
@@ -72,6 +74,7 @@ npx dbx-plugin dev --path . --port 5190      # 本地调试宿主 → http://127
 | `test-cleanup-e2e.py` | 21 | 孤立 Artifact 清理的安全规则 |
 | `test-retag-e2e.py` | 17 | 重命名 Tag 的真实请求序列 |
 | `check-contrast.py` / `check-i18n.py` | 全量配色对 / 275 键×2 语言 | 配色对比度门禁、翻译门禁 |
+| `check-packages.py` | 6 个目标 | 每个包二进制的格式/架构/签名与 manifest 路径是否与其平台相符 |
 
 ## 目录结构
 
@@ -99,7 +102,7 @@ dbx-plugin-imrepo/
 ├── tools/               # 开发脚本（Python，无第三方依赖）
 │   ├── _harness.py      # 测试公共件（选包/隔离配置/找浏览器/断言计数）
 │   ├── build-packages.py / make-preview.py / shoot-screenshots.py
-│   └── check-contrast.py / check-i18n.py / test-*-e2e.py
+│   └── check-packages.py / check-contrast.py / check-i18n.py / test-*-e2e.py
 ├── .preview/mock.js     # 验证台的 mock 桥（源文件，要提交）
 ├── docs/                # 设计文档
 └── CHANGELOG.md

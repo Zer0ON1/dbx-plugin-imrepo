@@ -269,6 +269,52 @@ OCI Distribution **没有 rename 原语**，也不能按 digest 删除单个 Tag
 | `aliyun-aksk` | access_key_id + secret_access_key + region(+instance_id) | HMAC-SHA1 → `GetAuthorizationToken` |
 | `tencent-aksk` | secret_id + secret_key + region + instance_id | TC3 → `DescribeInstanceToken` |
 
+## 平台支持
+
+一个带原生 sidecar 的插件，商店里那个"下载"按钮背后其实是**每个目标平台一个包**，由宿主挑：
+
+- 宿主用 `current_plugin_target()`（`crates/dbx-plugin-runtime/src/plugins/manifest.rs`）在运行时算出自己是谁：
+  `std::env::consts::OS/ARCH` 再映射两个名字 —— `macos → darwin`、`x86_64 → x64` —— 得到 `windows-x64`、`darwin-arm64` 这类目标名。
+- 再从 catalog 的 `version.artifacts[]` 里挑（`marketplace.rs` 的 `select_marketplace_artifact`）：**先精确匹配目标名，再回退 `universal`**；都不中就直接报
+  `Plugin '<id>' version '<v>' does not support target '<t>'`。
+- 因此**带原生 sidecar 的插件不能用 `universal`**，必须逐平台提供（`universal` 是纯前端插件的形态）。
+- 挑中之后：校验 catalog 里钉死的 sha256/size → 校验包内 DBX Store 的 Ed25519 签名 → 校验 manifest 身份 →
+  解包 → **按 manifest 里 `entrypoints.backend.executable` 的字面路径**启动二进制。
+
+本项目发六个目标：
+
+| target | 二进制格式 | 说明 |
+|---|---|---|
+| `windows-x64` / `windows-arm64` | PE | 包内文件名带 `.exe`，manifest 路径同步改写 |
+| `linux-x64` / `linux-arm64` | ELF | 静态链接，老发行版（如麒麟 V10，glibc 2.28）可直接跑 |
+| `darwin-x64` / `darwin-arm64` | Mach-O | 见下 |
+
+### macOS 的两个硬约束
+
+1. **`darwin-arm64` 必须有代码签名**。Apple Silicon 上 macOS 拒绝执行未签名的 arm64 代码 ——
+   不是"弹个警告"，是直接起不来。Go 链接器会**自动施加 ad-hoc 签名**（`LC_CODE_SIGNATURE`），
+   所以交叉编译出来的包是可用的；但这是**逐目标**行为，`darwin-x64` 就没有（Intel/Rosetta 接受未签名 x86_64）。
+   `tools/check-packages.py` 把这条断言下来，因为它的失败表现是"安装成功、启动即死"，很难当场归因。
+2. **Gatekeeper 隔离属性（`com.apple.quarantine`）** 由浏览器等下载器打上，而 DBX 用自己的 HTTP 客户端下载、
+   自己解包（Rust zip），宿主运行时里也没有任何 `xattr`/`codesign` 处理 —— 所以正常从插件中心安装不会带隔离属性。
+   只有"浏览器手动下载 .dbxp 再安装"这种路径才可能引入，届时需要 `xattr -d com.apple.quarantine` 处理。
+
+### 验证到什么程度
+
+不同平台的"可用"证据强度不同，这里如实标注：
+
+| 平台 | 构建 | 二进制格式/签名/路径 | 真实执行 |
+|---|---|---|---|
+| linux-x64 | 本机构建 | ✅ 门禁 | ✅ 本机全套 290 项断言 |
+| linux-arm64 | 交叉编译 | ✅ 门禁 | ✅ **真机**（麒麟 V10 aarch64 / glibc 2.28）204 项断言 |
+| windows-x64 / arm64 | 交叉编译 | ✅ 门禁 | CI 的 `windows-latest` 上跑全套 |
+| darwin-x64 / arm64 | 交叉编译 | ✅ 门禁（含 arm64 签名断言） | CI 的 `macos-latest` 上跑全套 |
+
+`tools/check-packages.py` 是**读**二进制而不是执行它，所以在任何主机上都能跑 —— 它覆盖的是
+"跨平台编译参数写错 / manifest 路径没按目标改写 / POSIX 包忘了给可执行位"这类**只有到用户机器上才炸**的问题。
+真正执行由 CI 矩阵负责：三个 runner 测的是**同一批构建产物**，所以证明了发布用的字节确实能在三种系统上跑起来。
+
+
 ## 安全说明
 
 - 凭证仅在 `connection/test`、`connection/connect` 等生命周期请求中由宿主传入，Sidecar 按 `connection.id` 缓存会话，UI 不接触任何密钥。

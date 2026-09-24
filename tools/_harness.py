@@ -133,11 +133,16 @@ def isolated_env() -> dict:
 
 
 _BROWSER_CANDIDATES = [
-    # explicit override wins, then per-platform well-known locations, then PATH
+    # explicit override wins, then per-platform well-known locations, then PATH.
+    # The macOS paths matter for CI: GitHub's macOS runners ship Chrome, not
+    # Edge, and an unfound browser makes the UI suite skip rather than fail.
     os.environ.get("CHROME_HEADLESS_SHELL", ""),
     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
     "/usr/bin/microsoft-edge",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
 ]
 

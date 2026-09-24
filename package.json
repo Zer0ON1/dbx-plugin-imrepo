@@ -10,16 +10,17 @@
   },
   "homepage": "https://github.com/Zer0ON1/dbx-plugin-imrepo",
   "scripts": {
+    "check:packages": "python3 tools/check-packages.py",
+    "contrast": "python3 tools/check-contrast.py",
+    "i18n": "python3 tools/check-i18n.py",
     "package": "python3 tools/build-packages.py",
     "preview": "python3 tools/make-preview.py",
-    "contrast": "python3 tools/check-contrast.py",
-    "test:settings": "python3 tools/test-settings-e2e.py",
-    "test:layers": "python3 tools/test-layers-e2e.py",
+    "test": "npm run check:packages && npm run test:settings && npm run test:layers && npm run test:cleanup && npm run test:retag && npm run test:ui && npm run contrast && npm run i18n",
     "test:cleanup": "python3 tools/test-cleanup-e2e.py",
+    "test:layers": "python3 tools/test-layers-e2e.py",
     "test:retag": "python3 tools/test-retag-e2e.py",
-    "test:ui": "python3 tools/make-preview.py && python3 tools/test-ui-e2e.py",
-    "test": "npm run test:settings && npm run test:layers && npm run test:cleanup && npm run test:retag && npm run test:ui && npm run contrast && npm run i18n",
-    "i18n": "python3 tools/check-i18n.py"
+    "test:settings": "python3 tools/test-settings-e2e.py",
+    "test:ui": "python3 tools/make-preview.py && python3 tools/test-ui-e2e.py"
   },
   "devDependencies": {
     "@dbx-app/plugin-cli": "^0.1.9"
