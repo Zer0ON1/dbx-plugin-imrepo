@@ -207,7 +207,7 @@
         <label class="field"><span data-i18n="np.name">项目名称</span><input id="newProjectName" placeholder="my-project" autocomplete="off" /></label>
         <p class="hint" data-i18n="np.nameHint">小写字母、数字与 . _ - 组成，以字母或数字开头。</p>
         <label class="field"><span data-i18n="project.accessLevel">访问级别</span><span id="newProjectAccess"></span></label>
-        <p class="hint" data-i18n="project.accessDesc">公开项目任何人可拉取；私有项目需登录认证。</p>
+        <p class="hint" data-i18n="project.publicDesc">公开项目任何人可拉取；私有项目需登录认证。</p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" data-close="createProjectModal" data-i18n="cancel">取消</button>
@@ -218,6 +218,29 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="./app.js"></script>
+  <!-- App scripts. Plain classic scripts, never ES modules: the workbench is also
+       opened over file://, where a module script is refused by CORS. They share
+       one namespace (window.IMREPO) and must stay in dependency order —
+       state → helpers → rpc → renderers → main. -->
+  <!-- app-scripts-anchor -->
+  <script src="./js/state.js"></script>
+  <script src="./js/i18n.js"></script>
+  <script src="./js/dom.js"></script>
+  <script src="./js/format.js"></script>
+  <script src="./js/rpc.js"></script>
+  <script src="./js/settings-model.js"></script>
+  <script src="./js/render-sidebar.js"></script>
+  <script src="./js/render-content.js"></script>
+  <script src="./js/render-modals.js"></script>
+  <script src="./js/render-layers.js"></script>
+  <script src="./js/render-vuln.js"></script>
+  <script src="./js/render-cleanup.js"></script>
+  <script src="./js/render-settings.js"></script>
+  <script src="./js/render-project.js"></script>
+  <script src="./js/render-users.js"></script>
+  <script src="./js/render-overview.js"></script>
+  <script src="./js/render-logs.js"></script>
+  <script src="./js/render-create-project.js"></script>
+  <script src="./js/main.js"></script>
 </body>
 </html>
