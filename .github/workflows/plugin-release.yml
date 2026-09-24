@@ -130,9 +130,11 @@ jobs:
           python tools/make-preview.py
           python tools/test-ui-e2e.py
 
-  # Static analysis: no sidecar involved, so one host is enough.
+  # Static analysis: no sidecar involved, so one host is enough. The browser
+  # baseline gate lives here too — it guards the sandbox UI on the oldest engine
+  # DBX supports, which no runner in this matrix has.
   gates:
-    name: Contrast and translation gates
+    name: Static gates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -141,8 +143,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: python tools/check-contrast.py
-      - run: python tools/check-i18n.py
+      - name: Colour contrast
+        run: python tools/check-contrast.py
+
+      - name: Translations
+        run: python tools/check-i18n.py
+
+      - name: Browser baseline (Chrome 109)
+        run: python tools/check-browser-baseline.py
 
   release:
     name: Attach packages to the release

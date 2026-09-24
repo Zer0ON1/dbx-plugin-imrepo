@@ -75,6 +75,7 @@ npx dbx-plugin dev --path . --port 5190      # 本地调试宿主 → http://127
 | `test-retag-e2e.py` | 17 | 重命名 Tag 的真实请求序列 |
 | `check-contrast.py` / `check-i18n.py` | 全量配色对 / 275 键×2 语言 | 配色对比度门禁、翻译门禁 |
 | `check-packages.py` | 6 个目标 | 每个包二进制的格式/架构/签名与 manifest 路径是否与其平台相符 |
+| `check-browser-baseline.py` | 34 个特性 | UI 是否用了新于 Chrome 109 的 CSS/JS 特性（DBX 的最低引擎） |
 
 ## 目录结构
 
@@ -102,7 +103,8 @@ dbx-plugin-imrepo/
 ├── tools/               # 开发脚本（Python，无第三方依赖）
 │   ├── _harness.py      # 测试公共件（选包/隔离配置/找浏览器/断言计数）
 │   ├── build-packages.py / make-preview.py / shoot-screenshots.py
-│   └── check-packages.py / check-contrast.py / check-i18n.py / test-*-e2e.py
+│   └── check-packages.py / check-browser-baseline.py / check-contrast.py
+│       / check-i18n.py / test-*-e2e.py
 ├── .preview/mock.js     # 验证台的 mock 桥（源文件，要提交）
 ├── docs/                # 设计文档
 └── CHANGELOG.md
