@@ -22,6 +22,12 @@ back and counts the badges, because the rows whose payload already carries
 architectures render theirs directly — a looser assertion passed while the lazy
 row silently lost its badges.
 
+### 发版时值得一并说明的平台验证
+
+本版本发布时，插件已在三台**实体机**上安装使用过：**麒麟 V10 aarch64、openEuler 24.03 amd64、
+Windows 11 Enterprise**（此前 0.1.2 的 Release Notes 只提到了麒麟 V10 上的 arm64 复验）。
+Release Notes 里可以如实写这一条——它比"CI 跑过"更有说服力，因为那是真实发行版上的实际使用。
+
 ### 发版时必须写进 Release Notes 的风险提示
 
 > **连接凭据会以 base64 形式缓存在 `<UserConfigDir>/imrepo-dbx-plugin/credentials.json`**

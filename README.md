@@ -28,10 +28,10 @@ Release 里放的是**未签名候选包**（即上架用的输入，见[发布]
 
 装好后新建连接，选仓库类型（Harbor / Docker Registry v2 / 云厂商托管 …），填地址与认证方式。
 
-Sidecar 是**静态链接**的 Go 二进制（`CGO_ENABLED=0`），不依赖目标机 libc。CI 在
-**ubuntu / windows / macos 三个真实 runner** 上各自跑一遍完整测试套件（测的就是发布用的那批字节），
-Linux 侧另有麒麟 V10（aarch64 / glibc 2.28 / 内核 4.19）真机复验。细节见
-[`docs/DESIGN.md` 的平台支持一节](docs/DESIGN.md#平台支持)。
+Sidecar 是**静态链接**的 Go 二进制（`CGO_ENABLED=0`），不依赖目标机 libc。已在
+**麒麟 V10（aarch64）、openEuler 24.03（amd64）、Windows 11 Enterprise** 实体机上安装使用；
+CI 另在 ubuntu / windows / macos 三个真实 runner 上各自跑一遍完整测试套件（测的就是发布用的那批字节）。
+细节见 [`docs/DESIGN.md` 的平台支持一节](docs/DESIGN.md#平台支持)。
 
 ## 功能
 

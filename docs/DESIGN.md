@@ -350,14 +350,24 @@ CI 的三个 runner **都装同一个 `chrome-headless-shell`**，而不是各�
 
 | 平台 | 构建 | 二进制格式/签名/路径 | 真实执行 |
 |---|---|---|---|
-| linux-x64 | 本机构建 | ✅ 门禁 | ✅ 本机全套 290 项断言 |
+| linux-x64 | 本机构建 | ✅ 门禁 | ✅ 本机全套断言 + **真机**（openEuler 24.03 amd64） |
 | linux-arm64 | 交叉编译 | ✅ 门禁 | ✅ **真机**（麒麟 V10 aarch64 / glibc 2.28）204 项断言 |
-| windows-x64 / arm64 | 交叉编译 | ✅ 门禁 | CI 的 `windows-latest` 上跑全套 |
-| darwin-x64 / arm64 | 交叉编译 | ✅ 门禁（含 arm64 签名断言） | CI 的 `macos-latest` 上跑全套 |
+| windows-x64 | 交叉编译 | ✅ 门禁 | ✅ **真机**（Windows 11 Enterprise）+ CI 的 `windows-latest` 跑全套 |
+| windows-arm64 | 交叉编译 | ✅ 门禁 | ❌ 未执行过（CI 的 `windows-latest` 是 x64，只会跑 `windows-x64` 包） |
+| darwin-arm64 | 交叉编译 | ✅ 门禁（含 arm64 签名断言） | CI 的 `macos-latest` 上跑全套（该 runner 目前是 Apple Silicon） |
+| darwin-x64 | 交叉编译 | ✅ 门禁 | ❌ 未执行过（CI 只跑 runner 自身架构对应的包） |
+
+> 每个 runner 用 `_harness.host_target()` 选包，**只跑本机架构那一只**；所以
+> `windows-arm64` / `darwin-x64` 目前只有包门禁（格式、架构、签名、manifest 路径）覆盖，
+> 没有执行记录。要补上需要对应架构的实体机或 runner。
+
+已在**实体机**上安装使用过的组合：**麒麟 V10 aarch64、openEuler 24.03 amd64、Windows 11 Enterprise**。
+麒麟那条另有完整测试套件（204 项）的复跑记录。
 
 `tools/check-packages.py` 是**读**二进制而不是执行它，所以在任何主机上都能跑 —— 它覆盖的是
 "跨平台编译参数写错 / manifest 路径没按目标改写 / POSIX 包忘了给可执行位"这类**只有到用户机器上才炸**的问题。
-真正执行由 CI 矩阵负责：三个 runner 测的是**同一批构建产物**，所以证明了发布用的字节确实能在三种系统上跑起来。
+真正执行由 CI 矩阵负责：三个 runner 测的是**同一批构建产物**，所以证明了发布用的字节确实能在
+Windows / Linux / macOS 上跑起来；再加上三台实体机的实际使用记录，四条主流发行版路径都有人走过。
 
 
 ## 安全说明
