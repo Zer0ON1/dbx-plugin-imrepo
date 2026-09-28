@@ -189,6 +189,9 @@
       { name: project.name, onClick: () => IM.goToProject(project.name) },
       { name: repo.name },
     ] : [{ name: repo.name }]);
+    // Expand the owning project first: the highlighted row lives inside it, so a
+    // collapsed tree would leave the highlight somewhere the user cannot see.
+    await IM.ensureProjectExpanded(project ? project.name : null);
     IM.renderSidebar();                                   // highlight + spinner slot
     // Harbor passes the repo name within its project; a v2 registry needs the
     // full namespaced path for the /v2/ endpoints.

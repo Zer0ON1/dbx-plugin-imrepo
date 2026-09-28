@@ -902,9 +902,21 @@ def main() -> int:
         check("the project's audit logs are listed", len(logs.get("logs") or []) == 4, logs)
         check("log rows carry time/operation/resource/username",
               all(k in (logs["logs"][0]) for k in ("time", "operation", "resource", "username")), logs["logs"][0])
-        check("a project filter resolves the project id",
-              any("project_id=1" in p for _, p in REQUESTS if "audit-logs" in p),
-              [p for _, p in REQUESTS if "audit-logs" in p])
+        # Assert the parameter Harbor actually reads.
+        #
+        # This check used to require "project_id=1" in the request, which is what
+        # the plugin sent and what Harbor ignores: its audit-log endpoint takes
+        # only q/sort/page/page_size (swagger, and ListAuditLogs reads only Q).
+        # The assertion therefore locked the bug in place — scoping silently did
+        # nothing while the test stayed green. Parsed rather than substring
+        # matched, so "q=project_id=1" cannot satisfy a bare-parameter check.
+        audit = [p for _, p in REQUESTS if "audit-logs" in p]
+        last = urllib.parse.urlparse(audit[-1]).query if audit else ""
+        params = urllib.parse.parse_qs(last)
+        check("the project filter goes through Harbor's q parameter",
+              params.get("q") == ["project_id=1"], params)
+        check("...and no bare project_id parameter, which Harbor ignores",
+              "project_id" not in params, params)
         logs = sc.result("harbor/logs", {"connectionId": CONN, "operation": "delete"})
         check("an operation filter is applied server-side",
               len(logs.get("logs") or []) == 1 and logs["logs"][0]["operation"] == "delete", logs)

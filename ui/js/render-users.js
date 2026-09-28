@@ -9,6 +9,17 @@
   "use strict";
 
   IM.renderUserManagement = async function renderUserManagement(sec) {
+    // Replace, don't append. Every mutation re-enters this function to refresh
+    // the table (admin toggle, create, delete), and appending without removing
+    // stacked a fresh copy of the whole section on every click — click the
+    // admin switch three times and the panel held three tables.
+    //
+    // Removing first also settles a re-entrancy race for free: a second call's
+    // clear detaches the first call's box, so whatever the first call then
+    // writes lands in a node that is no longer displayed.
+    Array.from(sec.children).forEach((child) => {
+      if (child.classList.contains("user-box")) child.remove();
+    });
     const box = IM.el("div", "user-box");
     sec.appendChild(box);
     box.innerHTML = IM.loadingHTML();

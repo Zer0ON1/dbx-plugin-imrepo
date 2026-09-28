@@ -22,6 +22,35 @@ back and counts the badges, because the rows whose payload already carries
 architectures render theirs directly — a looser assertion passed while the lazy
 row silently lost its badges.
 
+**Admin toggles stacked copies of the user panel.** Every mutation re-entered the
+renderer to refresh the table, and the renderer appended its box without removing
+the previous one — so each click on an admin switch, each user created, each user
+deleted added another whole section.
+
+**The dialog's table header showed rows through it while scrolling.** A sticky
+element is pinned to the content box, so the scroll container's own top padding
+was left uncovered, and rows scrolling past stayed visible in that strip. The
+sections that hold tables now declare their top padding (`--im-scroll-pad-top`)
+and the header offsets by it; the content pane had the same defect, one of the
+two places this could hide.
+
+**The audit-log scope filter did nothing.** Harbor's audit-log endpoint takes
+only `q`/`sort`/`page`/`page_size` — there is no `project_id` parameter (its
+swagger and `ListAuditLogs`, which reads only `Q`). The plugin sent a top-level
+`project_id`, which Harbor ignores in silence, so "current project" and "all"
+returned the same rows. Project scoping now goes through the `q` filter.
+
+> The test covering this asserted the parameter the plugin sent, not the one
+> Harbor reads — it required `project_id=1` in the request, so it passed for as
+> long as the feature was broken. It now parses the query and requires
+> `q=project_id=N`.
+
+**Opening a repository from the content pane left the tree collapsed.** The row
+that carries the highlight is rendered by the expanded project, so with the tree
+shut there was no sign of which repository was open. Opening a repository now
+expands its project first, fetching the repository list only when the collapse
+had discarded it.
+
 ### 发版时值得一并说明的平台验证
 
 本版本发布时，插件已在三台**实体机**上安装使用过：**麒麟 V10 aarch64、openEuler 24.03 amd64、

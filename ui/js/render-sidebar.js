@@ -131,6 +131,38 @@
   }
 
   /**
+   * Expands a project in the tree so one of its repositories can be highlighted.
+   *
+   * Opening a repository from the content pane (the project overview's rows, a
+   * v2 repository row) has to leave that repository visible in the sidebar — the
+   * row that carries the highlight is rendered *by the expanded project*. With
+   * the tree collapsed the row did not exist at all, so the content pane showed
+   * a repository the tree gave no sign of.
+   *
+   * The repository list is fetched only when it is missing, which is exactly the
+   * collapsed case: collapsing clears `repos`. Clicking a row that is already in
+   * the tree therefore costs nothing.
+   */
+  IM.ensureProjectExpanded = async function ensureProjectExpanded(name) {
+    if (!name) return;
+    IM.state.expandedProject = name;
+    if (IM.state.repos.length) return;
+    IM.state.reposLoading = true;
+    IM.renderSidebar();
+    try {
+      IM.state.repos = IM.state.mode === "harbor"
+        ? await IM.fetchCached("repos", name, "", "harbor/repositories", { project: name })
+        : await IM.fetchCached("repos", name, "", "registry/repositories", { namespace: name });
+    } catch (e) {
+      // Show the folder empty rather than a spinner that never resolves; the
+      // content pane is already rendering the repository the user asked for.
+      IM.state.repos = [];
+      IM.toast(e.message || IM.t("failed"), "err");
+    }
+    IM.state.reposLoading = false;
+  }
+
+  /**
    * Expands a project and shows its image overview. Shared by the sidebar click
    * and the breadcrumb: clicking the project segment of a "project / repo"
    * trail is exactly "open this project" again.

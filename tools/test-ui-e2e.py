@@ -466,6 +466,69 @@ def main() -> int:
               any(r.startswith("registry/arches") for r in probe_requests(dom)),
               f"no fallback read: {probe_requests(dom)[:8]}")
 
+        print("\nM5) opening a repository from the content pane expands the tree")
+        # Reported from use: with the project collapsed, clicking an image on the
+        # right showed the tag page while the tree stayed shut — the highlighted
+        # row was inside the collapsed folder, so there was no sign of where you
+        # were.
+        dom = browser.dom("theme=light&overview=1&collapsethenopen=1", 9000)
+        tree = re.search(r'id="tree"(.*?)</nav>', dom, re.S)
+        segment = tree.group(1) if tree else ""
+        check("the project is expanded again in the tree",
+              "ledger-api" in segment and "tree-item lvl2" in segment,
+              "the tree did not expand after opening a repository from the content pane")
+        check("...and the opened repository is the highlighted row",
+              'class="tree-item lvl2 active"' in segment,
+              "no active repository row in the tree")
+
+        print("\nM4) the audit-log scope filter actually scopes")
+        # Reported from use: "current project" and "all" showed the same rows.
+        # Harbor's audit-log endpoint takes only q/sort/page/page_size, so the
+        # project_id parameter the plugin sent was ignored and nothing filtered.
+        def log_rows(query):
+            page = browser.dom(query, 7000)
+            body = re.search(r'id="logsBody".*?</table>', page, re.S)
+            return body.group(0).count("<tr>") if body else -1
+
+        # The dialog opens scoped to the current project (that is its default),
+        # so "everything" has to be asked for explicitly.
+        scoped = log_rows("theme=light&openlogs=1")
+        everything = log_rows("theme=light&openlogs=1&logscope=all")
+        # Compared against each other, not against fixture lengths: the point is
+        # that the two scopes return different amounts, which is what was broken.
+        check("the default view is scoped to one project, not everything",
+              0 < scoped < everything, f"{scoped} of {everything} rows as the default")
+        check("choosing all rows returns strictly more than the project view",
+              everything > scoped, f"all={everything} vs scoped={scoped}")
+
+        print("\nM3) the sticky table header leaves no gap above it")
+        # Reported from use: with the dialog scrolled, rows that had scrolled past
+        # stayed visible through a strip above the header. A sticky element pins to
+        # the CONTENT box, so the scroll container's top padding was left uncovered.
+        dom = browser.dom("theme=light&openlogs=1&logscroll=260&stickycheck=1", 8000)
+        m = re.search(r'data-sticky-gap="(-?\d+)"', dom)
+        check("the probe measured the header", m is not None, "sticky probe did not run")
+        if m:
+            gap = int(m.group(1))
+            check("the header sits flush with the top of the scrolled dialog",
+                  gap <= 0,
+                  f"header sits {gap}px below the top edge — a strip of scrolled rows shows through it")
+
+        print("\nM2) toggling an admin switch does not stack another user table")
+        # Reported from use: each click on the admin checkbox appended a fresh
+        # copy of the whole section, so the panel grew by one table per click.
+        # The renderer appended its box without removing the previous one.
+        dom = browser.dom("theme=light&modal=settings&admintoggles=3", 9000)
+        boxes = dom.count('class="user-box"')
+        forms = dom.count('class="user-create"')
+        tables = dom.count('class="table admin-table"')
+        check("the toggle driver actually ran",
+              'data-probe-toggle="missing"' not in dom, "driver found no switch to click")
+        check("three admin toggles leave exactly one user panel",
+              boxes == 1, f"{boxes} user-box block(s) in the panel")
+        check("...one create-user form", forms == 1, f"{forms} create form(s)")
+        check("...and one user table", tables == 1, f"{tables} user table(s)")
+
         print("\nN) architectures survive leaving a repository and coming back")
         # Reported from use: the badges were there on first view and gone after
         # switching to another image and back. The paint was guarded by

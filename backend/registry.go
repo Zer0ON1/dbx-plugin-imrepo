@@ -188,7 +188,13 @@ func harborLogs(ctx context.Context, s *Session, params map[string]any) (any, er
 		if err != nil {
 			return nil, err
 		}
-		q.Set("project_id", fmt.Sprintf("%d", detail.ProjectID))
+		// Harbor's audit-log endpoint takes q/sort/page/page_size and nothing
+		// else — there is no project_id parameter (checked against the swagger
+		// and ListAuditLogs' signature, which reads only Q). A top-level
+		// project_id is therefore ignored in silence, and picking a project
+		// returned the same rows as everything else. Project scoping goes
+		// through the q filter, matching the model's column name.
+		q.Set("q", fmt.Sprintf("project_id=%d", detail.ProjectID))
 	}
 	data, code, err := s.Harbor.do(ctx, http.MethodGet, "/api/v2.0/audit-logs?"+q.Encode())
 	if err != nil {

@@ -281,6 +281,7 @@
     "harbor/memberRole": { ok: true },
     "harbor/memberRemove": { ok: true },
     "harbor/retentionSave": { ok: true, retentionId: 12 },
+    "harbor/userAdmin": { ok: true },
     "harbor/userCreate": { ok: true },
     "harbor/userPassword": { ok: true },
     "harbor/userDelete": { ok: true },
@@ -334,13 +335,27 @@
     "harbor/projectCreate": { ok: true, name: "new-project", public: false },
     "harbor/quotaGet": { project: "payments", quotaId: 42, hardBytes: -1, usedBytes: 214643506 },
     "harbor/quotaSet": { ok: true, hardBytes: -1 },
+    // Enough rows to overflow the dialog: a real page holds up to pageSize of
+    // them, and the reported symptom — rows showing through the sticky header —
+    // only appears once the body actually scrolls.
     "harbor/logs": {
-      logs: [
-        { time: "2026-09-23T12:41:02Z", operation: "pull", resource: "payments/auth-api:v1.4.2", username: "admin" },
-        { time: "2026-09-23T11:02:55Z", operation: "push", resource: "payments/gateway:2026-09-23_110231", username: "ci-robot" },
-        { time: "2026-09-22T17:22:10Z", operation: "create", resource: "project payments", username: "admin" },
-        { time: "2026-09-21T09:15:44Z", operation: "delete", resource: "payments/docs-api@sha256:44aa", username: "developer1" },
-      ],
+      logs: Array.from({ length: 40 }, (_, i) => {
+        const ops = ["pull", "push", "create", "delete", "update"];
+        const repos = ["auth-api", "gateway", "docs-api", "audit-api", "policy-api"];
+        const users = ["admin", "ci-robot", "developer1"];
+        return {
+          time: new Date(Date.UTC(2026, 8, 23, 12, 0, 0) - i * 3600e3).toISOString(),
+          operation: ops[i % ops.length],
+          resource: `payments/${repos[i % repos.length]}:v1.${i}.0`,
+          username: users[i % users.length],
+          // Every other row belongs to the other project, so a scope filter that
+          // does nothing is visible as "the same rows either way".
+          // 7 = payments (the project the dialog opens scoped to), 5 = another.
+          // Weighted so the DEFAULT view is long enough to scroll: the sticky
+          // header can only be exercised by content that actually overflows.
+          project_id: i % 4 === 3 ? 5 : 7,
+        };
+      }),
       page: 1, pageSize: 50,
     },
     "harbor/overview": {
@@ -423,6 +438,25 @@
       }
       // Settings round-trip: the harness keeps a copy so the modal shows what was
       // saved, and the policy markers downstream match.
+      if (method === "harbor/logs") {
+        const all = RESPONSES["harbor/logs"].logs;
+        // This mock stands in for the sidecar, so it receives what the UI sends
+        // — a project NAME — and has to resolve it the way the backend does
+        // (ProjectDetail). Filtering here on the backend's internal `q` parameter
+        // would test nothing: the UI never sends it.
+        const name = (p && p.project) || "";
+        const pid = name ? (RESPONSES["harbor/projectAdmin"].project.projectId) : null;
+        const rows = pid ? all.filter((l) => l.project_id === pid) : all;
+        return { logs: rows, page: 1, pageSize: 50 };
+      }
+      if (method === "harbor/userAdmin") {
+        // Flip the fixture, not just acknowledge: the panel re-reads the user
+        // list after the write, and a mock that always answered "ok" without
+        // changing anything would let a broken refresh pass unnoticed.
+        const u = (RESPONSES["harbor/users"] || []).find((x) => x.user_id === (p && p.userId));
+        if (u) u.sysadmin_flag = !!(p && p.admin);
+        return { ok: true };
+      }
       if (method === "settings/get") {
         return { settings: JSON.parse(JSON.stringify(saved)), connectionId: "preview-conn",
                  isDefault: false, path: RESPONSES["app/info"].settingsPath };
@@ -514,6 +548,14 @@
       setTimeout(() => byText("docs-api", "lvl2")?.click(), 700);
       setTimeout(() => byText("ledger-api", "lvl2")?.click(), 1600);
     }
+    if (params.get("collapsethenopen")) {
+      // The reported sequence: open a project (its images are listed on the
+      // right), collapse the project in the tree, then click a repository in the
+      // content pane. The tree must expand again — the highlighted row lives
+      // inside the project, so a collapsed tree hid it completely.
+      setTimeout(() => byText("payments")?.click(), 1400);   // collapse
+      setTimeout(() => document.querySelector("#contentBody .repo-link")?.click(), 2200);
+    }
     const clickRepo = params.get("clickrepo");
     if (clickRepo) {
       // Click a repository long after the background prefetch has finished, so a
@@ -591,7 +633,49 @@
         }
       }, 800);
     }
-    if (params.get("openlogs")) setTimeout(() => document.getElementById("btnLogs")?.click(), 800);
+    const logScope = params.get("logscope");
+    if (logScope) {
+      // Pick the project in the scope selector once the dialog has rendered.
+      setTimeout(() => {
+        const sel = document.querySelector("#logsBody .logs-bar select");
+        if (!sel) return;
+        // "all" means the empty option (the dialog opens scoped to the current
+        // project by design, so "" is the explicit way back to everything).
+        sel.value = logScope === "all" ? "" : logScope;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      }, 1400);
+    }
+    if (params.get("openlogs")) setTimeout(() => {
+      document.getElementById("btnLogs")?.click();
+      if (params.get("logscroll")) {
+        // Scroll the dialog so the sticky header is exercised: the reported
+        // symptom was rows visible through it.
+        setTimeout(() => {
+          const b = document.getElementById("logsBody");
+          if (!b) return;
+          b.scrollTop = Number(params.get("logscroll"));
+          if (!params.get("stickycheck")) return;
+          // Measure how far the sticky header sits below the scroll container's
+          // top edge once the body is scrolled. A positive gap is the container
+          // padding left uncovered, with scrolled-past rows showing through it.
+          const th = b.querySelector("th");
+          if (!th) { document.documentElement.dataset.stickyGap = "no-th"; return; }
+          const tbl = b.querySelector("table");
+          const d = document.documentElement.dataset;
+          d.stickyGap = String(Math.round(th.getBoundingClientRect().top - b.getBoundingClientRect().top));
+          // Diagnostics, so a surprising number can be explained instead of guessed.
+          d.stickyInfo = [
+            "scrollTop=" + Math.round(b.scrollTop),
+            "pad=" + getComputedStyle(b).paddingTop,
+            "barH=" + Math.round((b.querySelector(".logs-bar") || {getBoundingClientRect: () => ({height: 0})}).getBoundingClientRect().height),
+            "tableTopRel=" + (tbl ? Math.round(tbl.getBoundingClientRect().top - b.getBoundingClientRect().top) : "n/a"),
+            "thPos=" + getComputedStyle(th).position,
+            "thTopCss=" + getComputedStyle(th).top,
+            "rows=" + b.querySelectorAll("tbody tr").length,
+          ].join(" ");
+        }, 900);
+      }
+    }, 800);
     if (params.get("newproject")) setTimeout(() => document.getElementById("btnNewProject")?.click(), 800);
     if (openModal) setTimeout(() => {
       // Cleanup lives in the content toolbar, not in a row.
@@ -612,6 +696,24 @@
       }
       if (openModal === "settings") {
         document.getElementById("btnSettings")?.click();
+        const toggles = Number(params.get("admintoggles") || 0);
+        if (toggles) {
+          // Click the admin switch on a non-self row, several times, waiting long
+          // enough between hits for each re-render to land.
+          setTimeout(() => {
+            const sw = [...document.querySelectorAll("#settingsBody .user-box .set-switch input")]
+              .filter((el) => !el.disabled);
+            if (!sw.length) { document.documentElement.dataset.probeToggle = "missing"; return; }
+            let n = 0;
+            const hit = () => {
+              sw[n % sw.length].checked = !sw[n % sw.length].checked;
+              sw[n % sw.length].dispatchEvent(new Event("change", { bubbles: true }));
+              n += 1;
+              if (n < toggles) setTimeout(hit, 700);
+            };
+            hit();
+          }, 900);
+        }
         if (params.get("dirty")) {
           setTimeout(() => {
             const inp = document.querySelector("#settingsBody .set-input");
