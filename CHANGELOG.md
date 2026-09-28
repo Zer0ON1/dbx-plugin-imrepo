@@ -22,6 +22,22 @@ back and counts the badges, because the rows whose payload already carries
 architectures render theirs directly — a looser assertion passed while the lazy
 row silently lost its badges.
 
+### 发版时必须写进 Release Notes 的风险提示
+
+> **连接凭据会以 base64 形式缓存在 `<UserConfigDir>/imrepo-dbx-plugin/credentials.json`**
+> （Windows 为 `%AppData%\imrepo-dbx-plugin\`，macOS 为 `~/Library/Application Support/`，
+> Linux 为 `~/.config/`）。文件权限 `0600`，但 **base64 是编码而非加密**——能读取该文件的
+> 本地进程或用户即可还原出密码。这与 `~/.docker/config.json` 的威胁模型相同。
+>
+> 之所以要缓存：宿主在重连时可能不下发连接密钥，没有这份缓存，成员管理、清理、
+> 漏洞报告等需要认证的操作会全部失败。不需要时可删除该文件；插件会在下一次需要时重新写入。
+>
+> 更好的做法是为此类连接使用**权限最小化的账号**（Harbor robot account / 只读令牌）。
+
+这段必须出现在**下一个版本的 Release Notes 里**（注意：GitHub Release 不是 Changelog，
+两者都要写，或至少 Release 要有）。写它的理由是：0.1.2 已上架商店，用户装到的是含此行为的
+版本，而当时的 Release Notes 未提及——这是一项应当主动披露的本地存储设计。
+
 ## 0.1.2
 
 Everything here came from using the plugin against a real Harbor rather than the
