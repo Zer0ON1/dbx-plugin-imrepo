@@ -4,7 +4,7 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
-## Unreleased
+## 0.1.3
 
 **Architecture badges disappeared on the second visit to a repository.** First
 view was fine; switch to another image and back and they were gone.
