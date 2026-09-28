@@ -336,16 +336,9 @@ def main() -> int:
               "team-alpha" in dom and "team-beta" in dom and "nginx" in dom,
               "namespace folders missing")
         m = re.search(r'<button[^>]*id="btnNewProject"[^>]*>', dom)
-        check("docker-v2 disables the Harbor-only new-project button",
-              m is not None and "disabled" in m.group(0),
-              "new-project button not disabled in docker mode")
-        # Scoped to the tag: --dump-dom also serialises <script> bodies, so the
-        # whole i18n dictionary — including the English wording — is "in dom"
-        # regardless of what is on screen. Asserting the button's own title
-        # avoids that trap.
-        check("...and the button explains why it cannot create anything",
-              m is not None and "无需创建" in m.group(0) and 'title="新建项目"' not in m.group(0),
-              m.group(0) if m else "button not found")
+        check("docker-v2 hides the Harbor-only new-project entry",
+              m is not None and "hidden" in m.group(0),
+              "new-project button not hidden in docker mode")
         dom = browser.dom("theme=light&mode=docker&overviewtab=1", 6000)
         check("docker-v2 overview shows the namespace storage chart",
               "命名空间存储分布" in dom and "ov-chart" in dom, "v2 overview chart missing")
@@ -458,13 +451,20 @@ def main() -> int:
         # from `arches`, which the backend never sent, while the project overview
         # (a different struct) worked — so it looked like a styling quirk in one
         # table rather than a missing field. The fixture mirrored the omission.
-        dom = browser.dom("theme=light", 6000)
+        dom = browser.dom("theme=light&probe=1", 6000)
         check("the tag table heads a digest column", "Digest" in dom, "no digest column")
         check("a tag row shows its digest", "digest-cell" in dom and "sha256:" in dom,
               "no digest in the row")
         check("a tag row shows one badge per architecture",
               "arch-badge" in dom and "amd64" in dom and "arm64" in dom,
               "no architecture badges in the Harbor tag table")
+        # One fixture row carries no platform information, the way a single-arch
+        # image or an older Harbor does not. Its badges have to come from reading
+        # the manifest — badges that only appear when the server volunteers the
+        # data are badges that vanish in the field.
+        check("a row with no platform in the payload is read from the manifest",
+              any(r.startswith("registry/arches") for r in probe_requests(dom)),
+              f"no fallback read: {probe_requests(dom)[:8]}")
 
     except BrowserStalled as stalled:
         sys.exit(f"UI harness failed: {stalled}")

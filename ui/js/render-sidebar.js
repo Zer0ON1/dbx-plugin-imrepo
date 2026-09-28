@@ -178,18 +178,13 @@
     const hasProject = !!IM.state.current.project;
     btn.disabled = !(harbor && hasProject);
     btn.title = !harbor ? IM.t("cleanup.needHarbor") : hasProject ? IM.t("cleanup.title") : IM.t("cleanup.needProject");
-    // Harbor-only actions stay visible but disabled, each saying why: a control
-    // that silently disappears teaches nothing, and "which features exist on
-    // this registry type" is a question the UI should answer.
+    // Harbor-only actions are hidden outright on other registry types: an entry
+    // that cannot work is not shown at all. Which features each type supports,
+    // and why the others do not, is documented in the README's support matrix
+    // rather than repeated as tooltips on controls nobody can use.
     const np = IM.$("#btnNewProject");
-    if (np) {
-      np.disabled = !harbor;
-      np.title = harbor ? IM.t("newProject") : IM.t("newProject.needHarbor");
-    }
+    if (np) np.hidden = !harbor;
     const lg = IM.$("#btnLogs");
-    if (lg) {
-      lg.disabled = !harbor;
-      lg.title = harbor ? IM.t("logs") : IM.t("logs.needHarbor");
-    }
+    if (lg) lg.hidden = !harbor;
   }
 })(window.IMREPO = window.IMREPO || {});

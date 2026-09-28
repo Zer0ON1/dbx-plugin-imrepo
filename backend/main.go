@@ -22,7 +22,7 @@ func (e *methodNotFoundError) Error() string { return "method not found: " + e.m
 // sidecar launched straight out of a build directory).
 const (
 	pluginID      = "com.leavingrain.imrepo"
-	pluginVersion = "0.1.1"
+	pluginVersion = "0.1.2"
 )
 
 // githubURL is the project page shown in Settings → About.

@@ -3,7 +3,7 @@
   "manifest_version": 1,
   "id": "com.leavingrain.imrepo",
   "name": "IMREPO",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "leavingrain",
   "description": "IMREPO - Image Registry Studio: browse, manage and inspect OCI / Harbor container registries from a single workbench.",
   "icon": "assets/plugin.svg",

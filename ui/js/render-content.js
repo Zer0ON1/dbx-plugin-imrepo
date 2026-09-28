@@ -399,7 +399,23 @@
       const tdTag = IM.el("td");
       if (names.length) names.forEach((n) => tdTag.appendChild(IM.tagChip(n)));
       else tdTag.appendChild(IM.el("span", "tag-chip", IM.t("untagged")));
-      tdTag.appendChild(IM.archBadges(a.arches));
+      // Harbor reports platforms in the artifact payload and that is the cheap
+      // path — but only when it has them. For a single-arch image, an older
+      // Harbor, or a payload that carries neither `platform` nor `references`,
+      // fall back to reading the manifest itself, exactly as the v2 table does.
+      // Badges that appear only when the server volunteers the data are badges
+      // that disappear in the field.
+      const archSlot = IM.el("span", "arch-badges");
+      if (a.arches && a.arches.length) {
+        a.arches.forEach((x) => archSlot.appendChild(IM.archBadge(x)));
+      } else if (names.length) {
+        // The manifest read goes through Harbor's /v2/ API, which wants the full
+        // "<project>/<repo>" path — while Harbor's own REST API, used above,
+        // takes the short name. Verified against a running Harbor: the short
+        // name 404s on /v2/.
+        IM.loadTagArches(project ? project + "/" + repo : repo, names[0], archSlot, null);
+      }
+      tdTag.appendChild(archSlot);
       // Harbor already reports the digest per artifact, so this column costs
       // nothing — unlike the v2 table, which has to read the manifest for it.
       const tdDigest = IM.el("td");

@@ -64,11 +64,25 @@ func detectHarbor(ctx context.Context, s *Session) bool {
 	if s.RegistryType != "docker-v2" {
 		return false
 	}
-	if _, code, err := s.Harbor.do(ctx, http.MethodGet, "/api/v2.0/ping"); err == nil && code == http.StatusOK {
-		s.RegistryType = registryTypeHarbor
-		return true
+	data, code, err := s.Harbor.do(ctx, http.MethodGet, "/api/v2.0/ping")
+	if err != nil || code != http.StatusOK {
+		return false
 	}
-	return false
+	// A 200 is not evidence of Harbor: reverse proxies, single-page apps and
+	// registries with catch-all routes answer 200 to unknown paths, and reducing
+	// it to the status code put a plain v2 registry into Harbor mode — the badge
+	// read "harbor" while the project tree stayed empty, because the calls that
+	// need the real API then failed.
+	//
+	// Harbor's endpoint answers the literal string "Pong" (verified against a
+	// running Harbor 2.x); some deployments front it with a JSON body naming a
+	// harbor component, so accept either shape.
+	body := strings.ToLower(strings.TrimSpace(string(data)))
+	if !strings.Contains(body, "pong") && !strings.Contains(body, "harbor") {
+		return false
+	}
+	s.RegistryType = registryTypeHarbor
+	return true
 }
 
 func handleAction(ctx context.Context, params map[string]any) (any, error) {

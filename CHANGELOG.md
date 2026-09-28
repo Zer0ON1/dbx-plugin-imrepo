@@ -4,6 +4,44 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
+## 0.1.2
+
+Everything here came from using the plugin against a real Harbor rather than the
+test fixture — which is where the assumptions broke.
+
+**Fixed from a Linux run:**
+
+- **Filled buttons went blank on hover.** `.btn:hover` (specificity 0,2,0)
+  outranked `.btn-primary` (0,1,0), so the neutral hover grey won and painted
+  under white text — a ratio of 1.14. The contrast gate now walks the class
+  combinations the UI uses, applies the same cascade the browser does, and
+  measures state pairs; it had only ever compared static token pairs.
+- **The logo did not render.** The sandbox CSP is `img-src data: blob:`, so an
+  `<img>` pointing at the plugin's own asset was blocked outright. The mark is
+  inline SVG now, which is not an image load and needs no permission.
+- **Harbor's tag table showed no architectures.** Its list endpoint reports
+  `platform: null` and no `references` for the artifacts this server holds —
+  verified against a running Harbor. The table now reads the manifest per tag
+  (one cached request, the path the v2 table already used) instead of depending
+  on the list payload.
+- **Each tag shows its sha256.** Harbor already sent the digest; a v2 tags/list
+  does not, so the digest rides along with the manifest read above.
+- **A catch-all 200 was mistaken for Harbor.** Auto-detection rested on the
+  status code, so a registry behind a gateway that answers 200 to unknown paths
+  was switched into Harbor mode: the badge read "harbor" while every Harbor call
+  then failed. Harbor's endpoint answers the literal string "Pong"; detection
+  now checks the body.
+
+**Changed:**
+
+- Harbor-only entries are hidden on other registry types rather than shown
+  disabled, and the new-project action moved into the sidebar on the same line
+  as the resource list, aligned with the per-row settings gears.
+- The support matrix in the README states what each registry type can and cannot
+  do, with reasons — including the one that is a protocol limit rather than a
+  gap: untagged cleanup cannot exist on plain v2, because `catalog`/`tags` only
+  expose manifests that carry tags.
+
 ## 0.1.1
 
 **The plugin itself is unchanged** — the packaged manifest, UI and sidecar are

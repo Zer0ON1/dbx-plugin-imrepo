@@ -408,12 +408,17 @@
           // both — the tag table reads `arches`. This fixture used to carry only
           // the raw references, exactly as the backend did, which is why the
           // missing badges went unnoticed: mock and reality were wrong together.
-          arches: ["amd64", "arm64"],
-          // Multi-arch (index) artifacts carry one reference per platform.
-          references: [
-            { child_digest: "sha256:x" + i + "amd64", platform: { architecture: "amd64", os: "linux" } },
-            { child_digest: "sha256:x" + i + "arm64", platform: { architecture: "arm64", os: "linux" } },
-          ],
+          //
+          // The third row deliberately has neither. That is what a single-arch
+          // image, or an older Harbor, looks like — and its badges must still
+          // appear, read from the manifest instead of the list payload.
+          ...(i === 2 ? {} : {
+            arches: ["amd64", "arm64"],
+            references: [
+              { child_digest: "sha256:x" + i + "amd64", platform: { architecture: "amd64", os: "linux" } },
+              { child_digest: "sha256:x" + i + "arm64", platform: { architecture: "arm64", os: "linux" } },
+            ],
+          }),
         }));
       }
       // Settings round-trip: the harness keeps a copy so the modal shows what was

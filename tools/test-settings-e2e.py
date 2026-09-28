@@ -235,7 +235,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._fail(404, "harbor api not found")
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(b"Pong")
+            # A gateway that answers 200 to everything is not Harbor. Real Harbor
+            # answers the literal string "Pong"; this switch reproduces the
+            # catch-all page that used to be mistaken for one.
+            self.wfile.write(b"<html>Welcome</html>" if os.environ.get("FIXTURE_PING_ALIEN") else b"Pong")
             return
         if path.startswith("/api/v2.0/projects/%s/members" % PROJECT):
             return self._send(MEMBERS)
@@ -758,6 +761,25 @@ def main() -> int:
         imgs = sc.result("harbor/images", {"connectionId": "anon-conn", "project": PROJECT})
         check("Harbor operations work without reconfiguring the connection",
               imgs.get("imageCount") == 9, imgs.get("imageCount"))
+
+        print("\nN2) a catch-all 200 is not Harbor")
+        # The upgrade used to rest on the status code alone, so a registry behind
+        # a gateway that answers 200 to unknown paths was switched into Harbor
+        # mode: the badge read "harbor" while every Harbor call then failed.
+        os.environ["FIXTURE_PING_ALIEN"] = "1"
+        try:
+            sc.connect("alien-conn", registry_type="docker-v2")
+            info = sc.result("registry/info", {"connectionId": "alien-conn"})
+            check("a 200 that is not Harbor leaves the connection as docker-v2",
+                  info.get("registryType") == "docker-v2", info.get("registryType"))
+            # harbor/projects is deliberately NOT gated: the workbench probes it
+            # to decide whether the registry is Harbor at all. Use a method that
+            # is gated, so the assertion is about the gate.
+            refused = sc.call("harbor/projectAdmin", {"connectionId": "alien-conn", "project": PROJECT})
+            check("...and Harbor-only calls are refused rather than half-working",
+                  "error" in refused, refused)
+        finally:
+            os.environ.pop("FIXTURE_PING_ALIEN", None)
 
         print("\nO) toggling a project public / private")
         detail = sc.result("harbor/projectAdmin", {"connectionId": CONN, "project": PROJECT})

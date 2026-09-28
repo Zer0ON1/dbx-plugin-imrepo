@@ -10,7 +10,17 @@
   <div class="app" id="app">
     <header class="topbar">
       <div class="brand">
-        <img class="brand-icon" src="./assets/plugin.svg" alt="" />
+        <!-- Inline, not <img src="./assets/plugin.svg">: the sandbox CSP is
+             `img-src data: blob:`, so an image loaded from the plugin protocol
+             is blocked outright and the logo renders as nothing at all. Inline
+             SVG is not an image load and needs no permission. -->
+        <svg class="brand-icon" viewBox="0 0 128 128" aria-hidden="true">
+          <rect x="8" y="8" width="112" height="112" rx="22" fill="#3a78f5"/>
+          <rect x="30" y="34" width="68" height="18" rx="5" fill="#ffffff" opacity="0.95"/>
+          <rect x="30" y="58" width="68" height="18" rx="5" fill="#ffffff" opacity="0.75"/>
+          <rect x="30" y="82" width="68" height="12" rx="5" fill="#ffffff" opacity="0.55"/>
+          <circle cx="82" cy="43" r="5" fill="#2563eb"/>
+        </svg>
         <span class="brand-name">IMREPO</span>
         <span class="brand-sub">Image Registry Studio</span>
       </div>
@@ -78,7 +88,13 @@
         </div>
         <div class="content-body" id="contentBody">
           <div class="empty-state" id="emptyState">
-            <img src="./assets/plugin.svg" alt="" class="empty-icon" />
+            <svg class="empty-icon" viewBox="0 0 128 128" aria-hidden="true">
+              <rect x="8" y="8" width="112" height="112" rx="22" fill="#3a78f5"/>
+              <rect x="30" y="34" width="68" height="18" rx="5" fill="#ffffff" opacity="0.95"/>
+              <rect x="30" y="58" width="68" height="18" rx="5" fill="#ffffff" opacity="0.75"/>
+              <rect x="30" y="82" width="68" height="12" rx="5" fill="#ffffff" opacity="0.55"/>
+              <circle cx="82" cy="43" r="5" fill="#2563eb"/>
+            </svg>
             <p data-i18n="empty.title">连接一个镜像仓库以开始浏览</p>
             <p class="muted" data-i18n="empty.sub">在左侧选择项目或仓库，查看镜像 Tag、镜像层与安全漏洞报告</p>
           </div>
