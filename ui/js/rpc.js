@@ -118,29 +118,40 @@
     return (IM.state.connectionId || "") + "|" + repo + "|" + tag;
   }
 
-  IM.loadTagArches = async function loadTagArches(repo, tag, slot) {
+  /**
+   * Fills a tag row's architecture badges, and its digest when a slot is given.
+   *
+   * One request answers both. A v2 `tags/list` carries only names, so a sha256
+   * per row would otherwise cost a HEAD per row — and this call already reads
+   * the manifest, which is where the digest comes from.
+   */
+  IM.loadTagArches = async function loadTagArches(repo, tag, slot, digestSlot) {
     const key = IM.archCacheKey(repo, tag);
-    let arches = IM.archCache.get(key);
-    if (!arches) {
+    let info = IM.archCache.get(key);
+    if (!info) {
       // Two table rows (or a re-render landing while the first read is still in
       // flight) share one request instead of issuing two.
       let p = IM.archInflight.get(key);
       if (!p) {
         p = IM.invoke("registry/arches", { repository: repo, reference: tag })
-          .then((r) => (r && r.arches) || [])
-          .catch(() => [])
-          .then((list) => {
-            IM.archCache.set(key, list);
+          .then((r) => ({ arches: (r && r.arches) || [], digest: (r && r.digest) || "" }))
+          .catch(() => ({ arches: [], digest: "" }))
+          .then((value) => {
+            IM.archCache.set(key, value);
             IM.archInflight.delete(key);
-            return list;
+            return value;
           });
         IM.archInflight.set(key, p);
       }
-      arches = await p;
+      info = await p;
     }
-    if (arches.length && slot.isConnected) {
+    if (slot.isConnected && info.arches.length) {
       slot.innerHTML = "";
-      (arches || []).forEach((a) => slot.appendChild(IM.archBadge(a)));
+      info.arches.forEach((a) => slot.appendChild(IM.archBadge(a)));
+    }
+    if (digestSlot && digestSlot.isConnected && info.digest) {
+      digestSlot.textContent = IM.shortDigest(info.digest);
+      digestSlot.title = info.digest;
     }
   }
 })(window.IMREPO = window.IMREPO || {});

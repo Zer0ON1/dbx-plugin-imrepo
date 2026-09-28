@@ -138,6 +138,21 @@ settings 测试的 P 组会读**包内**的 `manifest.json`，断言它的 `entr
 - 逐层 Dockerfile 指令来自 Config Blob 的 `history`，跳过 `empty_layer: true` 的条目后按顺序与 `layers[]` 对齐。
 - Manifest List 按"linux/amd64 → 其他已知平台 → 未知平台"排序逐个尝试，任一条目取回后若不含 `layers`/`config` 则继续试下一条；全部失败才报错（不返回空列表）。
 
+### 仓库类型的功能边界
+
+按「协议能力」组织，而不是按「品牌」分支：所有功能都先问"这需要 OCI Distribution 的哪一部分"。
+
+- **纯 OCI v2 能给的一律给全** —— 浏览、Tag 增删改、镜像层、架构、digest、拉取命令、存储图表。
+  有些需要额外一次请求（v2 的 `tags/list` 不带 digest，也不带平台信息），就与已有的一次 manifest
+  读合并，不额外发请求。
+- **只有 Harbor 专有 REST 能给的，就明确不给**，并在界面上说明原因（按钮置灰 + 悬停文案），而不是
+  让它消失。消失的按钮教不会用户任何东西；"这个仓库类型没有审计日志"才是用户需要知道的。
+- 其中一条是**原理上的不可能**，值得单独记住：**无 Tag 清理在 v2 上无法实现**。OCI Distribution
+  的 `catalog` 与 `tags/list` 只暴露"有 tag 的" manifest，没有任何标准接口能枚举孤立 manifest ——
+  Harbor 能列出是因为它有专有接口。这不是"还没做"，是"协议里没有"。
+
+完整对照表见 README 的「仓库类型支持范围」。
+
 ## UI 主题与配色（重要约定）
 
 **不要使用 `--color-*` / `--radius*` / `--font*` 作为自定义变量名。**

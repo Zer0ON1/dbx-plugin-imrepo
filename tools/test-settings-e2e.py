@@ -89,7 +89,14 @@ REPOS: dict[str, list[dict]] = {
     ],
     "nodate": [{"digest": NODATE, "type": "IMAGE", "size": 4, "push_time": ""}],
     "tagged": [{"digest": TAGGED, "type": "IMAGE", "size": 5, "push_time": ago(5),
-                "tags": [{"name": "latest"}, {"name": "release-1.2"}]}],
+                "tags": [{"name": "latest"}, {"name": "release-1.2"}],
+                # A multi-arch index. The backend turns these references into the
+                # `arches` the tag table renders; without them this fixture, like
+                # the backend, could not exercise that field at all.
+                "references": [
+                    {"child_digest": "sha256:" + "aa" * 8, "platform": {"architecture": "amd64", "os": "linux"}},
+                    {"child_digest": "sha256:" + "bb" * 8, "platform": {"architecture": "arm64", "os": "linux"}},
+                ]}],
 }
 
 REPORT = {
@@ -938,6 +945,23 @@ def main() -> int:
                                                "repository": "team-alpha/app", "reference": "v1"})
         check("a single-arch manifest answers from its config blob",
               arches.get("arches") == ["amd64"], arches)
+        # The same read answers the digest, which a v2 tags/list does not carry —
+        # this is what lets the tag table show a sha256 per row for no extra cost.
+        check("the same read reports the manifest digest",
+              arches.get("digest") == V2_DIGEST, arches.get("digest"))
+
+        print("\nT) harbor artifacts carry the architectures the tag table renders")
+        # The backend computes `arches` from platform/references and the table
+        # reads it. It used to send only the parts, so the table rendered badges
+        # from a field that never arrived — invisible to the tests, because the
+        # fixture (like the backend) did not have it either.
+        multi = sc.result("harbor/artifacts", {"connectionId": CONN, "project": PROJECT, "repository": "tagged"})
+        multi_arches = [a.get("arches") for a in multi if a.get("digest") == TAGGED]
+        check("a multi-arch artifact reports both architectures",
+              multi_arches == [["amd64", "arm64"]], multi_arches)
+        single = sc.result("harbor/artifacts", {"connectionId": CONN, "project": PROJECT, "repository": "legacy-svc"})
+        check("an artifact with no platform information reports none, not a guess",
+              (single[0].get("arches") or []) == [], single[0].get("arches"))
 
         sc.close()
     finally:

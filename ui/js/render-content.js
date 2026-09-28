@@ -341,7 +341,7 @@
     const table = IM.el("table", "table");
     const thead = IM.el("thead");
     const hr = IM.el("tr");
-    [IM.t("tag"), IM.t("pull"), IM.t("retag"), IM.t("layers"), IM.t("vuln"), IM.t("delete")].forEach((h) => hr.appendChild(IM.el("th", "", h)));
+    [IM.t("tag"), IM.t("digest"), IM.t("pull"), IM.t("retag"), IM.t("layers"), IM.t("vuln"), IM.t("delete")].forEach((h) => hr.appendChild(IM.el("th", "", h)));
     thead.appendChild(hr);
     table.appendChild(thead);
     const tbody = IM.el("tbody");
@@ -351,7 +351,13 @@
       tdTag.appendChild(IM.tagChip(tg));
       const archSlot = IM.el("span", "arch-badges");
       tdTag.appendChild(archSlot);
-      IM.loadTagArches(repo, tg, archSlot);
+      // A v2 tag list has no digest, so it arrives with the architecture read
+      // (same manifest request). The placeholder keeps the column from jumping
+      // when it lands.
+      const tdDigest = IM.el("td");
+      const dgSpan = IM.el("span", "mono digest-cell", "—");
+      tdDigest.appendChild(dgSpan);
+      IM.loadTagArches(repo, tg, archSlot, dgSpan);
       const tdPull = IM.el("td");
       const pullBtn = IM.el("button", "btn btn-outline btn-sm copy-btn", IM.t("pull"));
       pullBtn.title = IM.t("pull");
@@ -365,7 +371,7 @@
       tdVuln.appendChild(IM.iconBtn(IM.t("vuln"), "shield", () => IM.openVuln(repo, tg, null)));
       const tdDel = IM.el("td");
       tdDel.appendChild(IM.deleteTagBtn(repo, tg, null));
-      tr.append(tdTag, tdPull, tdRetag, tdLayers, tdVuln, tdDel);
+      tr.append(tdTag, tdDigest, tdPull, tdRetag, tdLayers, tdVuln, tdDel);
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -383,7 +389,7 @@
     const table = IM.el("table", "table");
     const thead = IM.el("thead");
     const hr = IM.el("tr");
-    [IM.t("tag"), IM.t("size"), IM.t("pushed"), IM.t("pull"), IM.t("retag"), IM.t("layers"), IM.t("vuln"), IM.t("delete")].forEach((h) => hr.appendChild(IM.el("th", "", h)));
+    [IM.t("tag"), IM.t("digest"), IM.t("size"), IM.t("pushed"), IM.t("pull"), IM.t("retag"), IM.t("layers"), IM.t("vuln"), IM.t("delete")].forEach((h) => hr.appendChild(IM.el("th", "", h)));
     thead.appendChild(hr);
     table.appendChild(thead);
     const tbody = IM.el("tbody");
@@ -394,6 +400,12 @@
       if (names.length) names.forEach((n) => tdTag.appendChild(IM.tagChip(n)));
       else tdTag.appendChild(IM.el("span", "tag-chip", IM.t("untagged")));
       tdTag.appendChild(IM.archBadges(a.arches));
+      // Harbor already reports the digest per artifact, so this column costs
+      // nothing — unlike the v2 table, which has to read the manifest for it.
+      const tdDigest = IM.el("td");
+      const dg = IM.el("span", "mono digest-cell", IM.shortDigest(a.digest));
+      dg.title = a.digest || "";
+      tdDigest.appendChild(dg);
       // Only tagged images have a retention position; untagged ones belong to cleanup.
       if (names.length && outside.has(a.digest)) {
         const mark = IM.el("span", "badge warn-soft", IM.t("retention.outOfPolicy"));
@@ -416,7 +428,7 @@
       tdVuln.appendChild(IM.iconBtn(IM.t("vuln"), "shield", () => IM.openVuln(project + "/" + repo, ref0, a.digest)));
       const tdDel = IM.el("td");
       if (names.length) tdDel.appendChild(IM.deleteTagBtn(project + "/" + repo, IM.deletableTag(names, names[0]), a.digest));
-      tr.append(tdTag, tdSize, tdPush, tdPull, tdRetag, tdLayers, tdVuln, tdDel);
+      tr.append(tdTag, tdDigest, tdSize, tdPush, tdPull, tdRetag, tdLayers, tdVuln, tdDel);
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);

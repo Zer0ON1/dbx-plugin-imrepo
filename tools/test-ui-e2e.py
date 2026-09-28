@@ -211,7 +211,11 @@ def main() -> int:
               'row-spinner" hidden' in dom)
         print("\nD) cleanup dialog lists what the scan found")
         dom = browser.dom("theme=light&modal=cleanup", 4000)
-        rows = len(re.findall(r'digest-cell', dom))
+        # Scoped to the dialog: digest-cell is a shared class (the tables behind
+        # the modal use it too), so counting it page-wide made this assertion
+        # depend on no other view ever rendering a digest.
+        dialog = re.search(r'id="cleanupBody".*?</table>', dom, re.S)
+        rows = len(re.findall(r'digest-cell', dialog.group(0))) if dialog else -1
         check("lists one row per untagged artifact", rows == 4, f"{rows} row(s)")
         check("reports scanned repositories from the scan payload",
               "已扫描仓库: 9/9" in dom, "summary missing the scanned count")
@@ -332,8 +336,16 @@ def main() -> int:
               "team-alpha" in dom and "team-beta" in dom and "nginx" in dom,
               "namespace folders missing")
         m = re.search(r'<button[^>]*id="btnNewProject"[^>]*>', dom)
-        check("docker-v2 hides the Harbor-only new-project button",
-              m is not None and "hidden" in m.group(0), "new-project button not hidden in docker mode")
+        check("docker-v2 disables the Harbor-only new-project button",
+              m is not None and "disabled" in m.group(0),
+              "new-project button not disabled in docker mode")
+        # Scoped to the tag: --dump-dom also serialises <script> bodies, so the
+        # whole i18n dictionary — including the English wording — is "in dom"
+        # regardless of what is on screen. Asserting the button's own title
+        # avoids that trap.
+        check("...and the button explains why it cannot create anything",
+              m is not None and "无需创建" in m.group(0) and 'title="新建项目"' not in m.group(0),
+              m.group(0) if m else "button not found")
         dom = browser.dom("theme=light&mode=docker&overviewtab=1", 6000)
         check("docker-v2 overview shows the namespace storage chart",
               "命名空间存储分布" in dom and "ov-chart" in dom, "v2 overview chart missing")
@@ -396,6 +408,9 @@ def main() -> int:
               "team-alpha" in dom and "tag-chip" in dom, "tag table missing")
         check("each tag shows its arch badges",
               "arch-badge" in dom and "amd64" in dom and "arm64" in dom, "tag arch badges missing")
+        # Same lazy read answers the digest: a v2 tags/list carries only names.
+        check("each tag shows its digest too", "digest-cell" in dom and "sha256:" in dom,
+              "no digest in the v2 tag table")
 
         print("\nK) switching connection drops the previous registry's view")
         # The host fires onContext at t=1.5s, then the driver re-opens the first
@@ -436,6 +451,20 @@ def main() -> int:
         check("the tag table read its architectures", len(arches) >= 3, f"requests: {arches}")
         check("one architecture read per tag, even after a second render",
               len(arches) == len(set(arches)), f"duplicate reads: {arches}")
+
+        print("\nM) the Harbor tag table shows a digest and the architectures")
+        # Both fields had to be added to the artifacts payload, and this is the
+        # test that would have caught their absence: the table rendered badges
+        # from `arches`, which the backend never sent, while the project overview
+        # (a different struct) worked — so it looked like a styling quirk in one
+        # table rather than a missing field. The fixture mirrored the omission.
+        dom = browser.dom("theme=light", 6000)
+        check("the tag table heads a digest column", "Digest" in dom, "no digest column")
+        check("a tag row shows its digest", "digest-cell" in dom and "sha256:" in dom,
+              "no digest in the row")
+        check("a tag row shows one badge per architecture",
+              "arch-badge" in dom and "amd64" in dom and "arm64" in dom,
+              "no architecture badges in the Harbor tag table")
 
     except BrowserStalled as stalled:
         sys.exit(f"UI harness failed: {stalled}")

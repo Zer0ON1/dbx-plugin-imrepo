@@ -177,9 +177,15 @@ html, body {
 }
 .btn:hover { background: var(--im-hover); }
 .btn-primary { background: var(--im-primary-solid); border-color: var(--im-primary-solid); color: var(--im-primary-fg); }
-.btn-primary:hover { filter: brightness(1.1); }
 .btn-danger { background: var(--im-danger-solid); border-color: var(--im-danger-solid); color: #fff; }
-.btn-danger:hover { filter: brightness(1.08); }
+/* The filled variants MUST restate their background on hover.
+   `.btn:hover` is (0,2,0) — a class plus a pseudo-class — which outranks plain
+   `.btn-primary` (0,1,0). So the neutral `background: var(--im-hover)` won on
+   hover, painting a near-white fill under white text: every solid button went
+   blank the moment the pointer touched it. These rules have the same
+   specificity as `.btn:hover` and come after it, so they win. */
+.btn-primary:hover { background: var(--im-primary-solid); border-color: var(--im-primary-solid); filter: brightness(1.1); }
+.btn-danger:hover { background: var(--im-danger-solid); border-color: var(--im-danger-solid); filter: brightness(1.08); }
 .btn-danger-outline { color: var(--im-danger); border-color: var(--im-danger); }
 .btn-danger-outline:hover { background: var(--im-danger-soft); }
 .btn-outline { border-color: var(--im-border-strong); }
@@ -230,9 +236,14 @@ html, body {
 .ov-project-link + .ov-project-link { margin-top: 1px; }
 
 .sidebar-title {
-  padding: 8px 14px 4px; font-size: 11px; font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between;
+  /* Right padding 16px = the tree's 8px + a row's 8px, so the "+" below sits in
+     the same column as the per-row settings gears. */
+  padding: 8px 16px 4px 14px;
+  font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: .6px; color: var(--im-fg-subtle);
 }
+.sidebar-title .new-project { width: 20px; height: 20px; flex-shrink: 0; }
 .tree { flex: 1; overflow-y: auto; padding: 4px 8px 12px; }
 
 .tree-item {

@@ -320,11 +320,11 @@ func registryArches(ctx context.Context, s *Session, params map[string]any) (any
 	if repo == "" || ref == "" {
 		return nil, errors.New("repository and reference are required")
 	}
-	arches, err := archesFor(ctx, s, repo, ref)
+	arches, digest, err := archesFor(ctx, s, repo, ref)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"repository": repo, "reference": ref, "arches": arches}, nil
+	return map[string]any{"repository": repo, "reference": ref, "arches": arches, "digest": digest}, nil
 }
 
 // registryDelete removes an OCI manifest. A plain OCI delete is digest-scoped,

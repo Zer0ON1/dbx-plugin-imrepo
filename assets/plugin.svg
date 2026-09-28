@@ -1,11 +1,5 @@
 <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="0" y2="128" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#4f8cff"/>
-      <stop offset="1" stop-color="#2563eb"/>
-    </linearGradient>
-  </defs>
-  <rect x="8" y="8" width="112" height="112" rx="22" fill="url(#g)"/>
+  <rect x="8" y="8" width="112" height="112" rx="22" fill="#3a78f5"/>
   <!-- stacked layers (image layers) -->
   <rect x="30" y="34" width="68" height="18" rx="5" fill="#ffffff" opacity="0.95"/>
   <rect x="30" y="58" width="68" height="18" rx="5" fill="#ffffff" opacity="0.75"/>

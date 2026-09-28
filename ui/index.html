@@ -51,7 +51,16 @@
         <div class="sidebar-search" id="sidebarSearch">
           <input type="search" id="searchInput" data-i18n-placeholder="search" placeholder="搜索仓库 / 项目..." />
         </div>
-        <div class="sidebar-title" id="treeTitle" data-i18n="explorer">资源浏览</div>
+        <div class="sidebar-title" id="treeTitle">
+          <span data-i18n="explorer">资源浏览</span>
+          <!-- Harbor-only, like the per-row gears it lines up with: a plain v2
+               registry has no project object to create. Hidden by
+               syncCleanupButton, and icon-only so it sits in the same column. -->
+          <button class="icon-btn new-project" id="btnNewProject"
+                  title="新建项目" data-i18n-title="newProject">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7.25 2h1.5v5.25H14v1.5H8.75V14h-1.5V8.75H2v-1.5h5.25V2Z"/></svg>
+          </button>
+        </div>
         <nav class="tree" id="tree"></nav>
         <div class="overview-list" id="overviewList" hidden></div>
       </aside>
@@ -60,10 +69,6 @@
         <div class="content-toolbar" id="contentToolbar">
           <div class="crumbs" id="crumbs"></div>
           <div class="content-toolbar-actions">
-            <button class="btn btn-outline btn-sm" id="btnNewProject" title="新建项目">
-              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7.25 2h1.5v5.25H14v1.5H8.75V14h-1.5V8.75H2v-1.5h5.25V2Z"/></svg>
-              <span data-i18n="newProject">新建项目</span>
-            </button>
             <button class="btn btn-outline btn-sm" id="btnCleanup" disabled
                     title="清理无 Tag 的孤立镜像">
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6.5 1.5h3l.4 1.2H13v1.6H3V2.7h3.1l.4-1.2ZM4.1 5.8h7.8l-.55 7.6A1.5 1.5 0 0 1 9.85 14.8H6.15a1.5 1.5 0 0 1-1.5-1.4L4.1 5.8Z"/></svg>

@@ -44,7 +44,7 @@ ENTRY = re.compile(r'["\']?([a-zA-Z][\w]*(?:\.[\w]+)*)["\']?\s*:\s*"')
 # t("key") / IM.t('key'). A key ending in "." is a prefix built dynamically
 # (t("role." + id)), which cannot be resolved statically — see DYNAMIC_PREFIX.
 CALL = re.compile(r"""\b(?:IM\.)?t\(\s*["']([^"']+)["']""")
-ATTR = re.compile(r'data-i18n(?:-placeholder)?="([^"]+)"')
+ATTR = re.compile(r'data-i18n(?:-placeholder|-title)?="([^"]+)"')
 # Keys the code assembles at runtime, e.g. t("role." + roleId). Listed so the
 # "defined but unused" report does not flag their members as dead.
 DYNAMIC_PREFIXES = ("role.", "settings.sev.")

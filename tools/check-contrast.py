@@ -138,6 +138,118 @@ def ratio(a: tuple[int, ...], b: tuple[int, ...]) -> float:
     return (hi + 0.05) / (lo + 0.05)
 
 
+# ---------------------------------------------------------------------------
+# State overrides
+# ---------------------------------------------------------------------------
+# A static token-pair check cannot see a state rule that repaints a component
+# whose text colour does not move with it — and that is not hypothetical.
+# `.btn:hover` (specificity 0,2,0) outranked `.btn-primary` (0,1,0), so hovering
+# a filled button painted the neutral hover grey under white text: every solid
+# button went blank under the pointer while every individual token pair still
+# measured fine. This walks the real class combinations from the UI and applies
+# the same cascade the browser does: base rules and state rules compete on
+# specificity, ties go to whichever comes last.
+UI_DIR = CSS.parent
+CLASS_ATTR = re.compile(r'class="([^"]+)"')
+EL_CLASSES = re.compile(r'IM\.el\(\s*"[a-z]+"\s*,\s*"([^"]+)"')
+RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")
+COMPONENT_SELECTOR = re.compile(r"^\.[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*(?::(hover|focus-visible|focus|active))?$")
+STATES = ("hover", "focus-visible", "focus", "active")
+TOKEN_REF = re.compile(r"var\((--im-[a-z0-9-]+)\)")
+
+PROPS_TO_CHECK = (("color", "background"), ("color", "background-color"))
+
+
+def strip_comments(css: str) -> str:
+    return re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+
+
+def ui_class_combinations() -> set[frozenset[str]]:
+    """The class sets the UI actually puts on a single element.
+
+    Derived from the source rather than guessed: an element carrying both `.btn`
+    and `.btn-primary` is exactly what makes the two rules interact.
+    """
+    combos: set[frozenset[str]] = set()
+    sources = [UI_DIR / "index.html"] + sorted((UI_DIR / "js").glob("*.js"))
+    for path in sources:
+        text = path.read_text(encoding="utf-8")
+        for group in CLASS_ATTR.findall(text) + EL_CLASSES.findall(text):
+            combos.add(frozenset(group.split()))
+    return {c for c in combos if c}
+
+
+def parse_rules(css: str) -> list[tuple[frozenset[str], str | None, int, int, dict[str, str]]]:
+    """Class-only component rules as (classes, state, specificity, order, decls)."""
+    rules = []
+    for order, (selector, body) in enumerate(RULE.findall(strip_comments(css))):
+        match = COMPONENT_SELECTOR.match(selector.strip())
+        if not match:
+            continue
+        state = match.group(1)
+        classes = frozenset(re.findall(r"\.([a-z][a-z0-9-]*)", selector))
+        decls = {
+            prop: value.strip()
+            for prop, value in re.findall(r"([a-z-]+)\s*:\s*([^;]+);", body + ";")
+            if prop in ("color", "background", "background-color")
+        }
+        if decls:
+            rules.append((classes, state, len(classes) + (1 if state else 0), order, decls))
+    return rules
+
+
+def effective(rules, combo: frozenset[str], prop: str, state: str | None) -> str | None:
+    """The declaration that wins for `prop` on `combo` in `state`.
+
+    Base rules always apply; a state rule applies on top of them. Both compete on
+    (specificity, source order), which is what decides the browser's answer too.
+    """
+    best_key, best_value = None, None
+    for classes, rule_state, spec, order, decls in rules:
+        if prop not in decls or not classes <= combo:
+            continue
+        if rule_state is not None and rule_state != state:
+            continue
+        key = (spec, order)
+        if best_key is None or key >= best_key:
+            best_key, best_value = key, decls[prop]
+    return best_value
+
+
+def token_colour(value: str | None, tokens: dict[str, str]) -> str | None:
+    if not value:
+        return None
+    ref = TOKEN_REF.search(value)
+    if ref:
+        return tokens.get(ref.group(1))
+    return value if value.startswith("#") else None
+
+
+def state_failures(css: str, tokens: dict[str, str]) -> list[str]:
+    rules = parse_rules(css)
+    problems = []
+    for combo in sorted(ui_class_combinations(), key=lambda c: sorted(c)):
+        for state in STATES:
+            if not any(s == state and c <= combo for c, s, _, _, _ in rules):
+                continue
+            for fg_prop, bg_prop in PROPS_TO_CHECK:
+                fg = token_colour(effective(rules, combo, "color", state), tokens)
+                bg = token_colour(effective(rules, combo, bg_prop, state), tokens)
+                if not fg or not bg:
+                    continue
+                # A soft tint is rgba(); measuring it directly compares it with
+                # its own hue and reads ~1.0. Composite it over the page first,
+                # exactly as the tint pairs above do.
+                base = tokens.get("--im-bg", "#ffffff")
+                got = ratio(composite(fg, base)[:3], composite(bg, base)[:3])
+                if got < 4.5:
+                    label = " ".join(sorted(combo))
+                    problems.append(
+                        f":{state} on [{label}] = {got:.2f} ({fg} on {bg}, need 4.5)")
+                    break   # one report per combo/state, not per property alias
+    return problems
+
+
 def main() -> int:
     verbose = "--verbose" in sys.argv
     css = CSS.read_text(encoding="utf-8")
@@ -168,6 +280,11 @@ def main() -> int:
                 failures.append(f"{name}: {fg} on {tint} over {bg} = {got:.2f} (need {need})")
             if verbose or not ok:
                 print(f"  {'PASS' if ok else 'FAIL'}  {fg:22s} on {tint}+{bg:12s} {got:5.2f} (need {need})")
+
+        # Regression guard for state rules that repaint a filled component.
+        for problem in state_failures(css, tokens):
+            failures.append(f"{name}: {problem}")
+            print(f"  FAIL  {problem}")
 
     print()
     if failures:

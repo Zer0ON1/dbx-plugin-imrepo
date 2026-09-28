@@ -404,6 +404,11 @@
           size: (100 + i) * 1024 * 1024,
           push_time: "2026-09-22T14:18:36Z",
           tags: [{ name: `${name}-${i + 1}` }],
+          // The backend computes `arches` from the references below and sends
+          // both — the tag table reads `arches`. This fixture used to carry only
+          // the raw references, exactly as the backend did, which is why the
+          // missing badges went unnoticed: mock and reality were wrong together.
+          arches: ["amd64", "arm64"],
           // Multi-arch (index) artifacts carry one reference per platform.
           references: [
             { child_digest: "sha256:x" + i + "amd64", platform: { architecture: "amd64", os: "linux" } },
@@ -451,7 +456,12 @@
       }
       if (method === "registry/arches") {
         if (slowArches) await new Promise((r) => setTimeout(r, slowArches));
-        return { repository: (p && p.repository) || "", reference: (p && p.reference) || "",
+        // The digest rides along with the architectures: a v2 tags/list has no
+        // digest, and the tag table shows one, so the backend answers both from
+        // the manifest read it was already doing.
+        const ref = (p && p.reference) || "";
+        return { repository: (p && p.repository) || "", reference: ref,
+                 digest: "sha256:" + ref.padEnd(8, "0") + "c0ffee".repeat(10),
                  arches: ["amd64", "arm64"] };
       }
       if (!(method in RESPONSES)) throw new Error("no mock for " + method);

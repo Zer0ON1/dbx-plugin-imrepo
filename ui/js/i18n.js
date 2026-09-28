@@ -43,6 +43,11 @@
       "cleanup.failedCount": "失败", "cleanup.nothingSelected": "请至少选择一条",
       "cleanup.needProject": "请先在左侧选择一个项目",
       "cleanup.needHarbor": "仅 Harbor 支持按 digest 删除 Artifact；通用 OCI v2 无法列出无 Tag 的 Manifest",
+      // Why a control is unavailable on this registry type. Shown as the
+      // disabled control's tooltip, so the reason reaches the user instead of
+      // the button simply not being there.
+      "newProject.needHarbor": "仅 Harbor 有「项目」这个对象。通用 OCI v2 的仓库名首段即命名空间，无需创建",
+      "logs.needHarbor": "审计日志是 Harbor 的接口；OCI v2 协议没有审计端点",
       repo: "仓库", tag: "Tag", size: "大小", arch: "架构/OS", pushed: "推送时间",
       pullCount: "拉取次数", tags: "Tag 数", updated: "更新时间", public: "公开",
       untagged: "无 Tag 镜像 (清理)", noVuln: "未发现漏洞或未启用扫描", severity: "严重性",
@@ -175,6 +180,8 @@
       "cleanup.failedCount": "failed", "cleanup.nothingSelected": "Select at least one row",
       "cleanup.needProject": "Select a project in the sidebar first",
       "cleanup.needHarbor": "Only Harbor can delete artifacts by digest; a plain OCI v2 registry cannot enumerate untagged manifests",
+      "newProject.needHarbor": "Only Harbor has a project object. On a plain OCI v2 registry the first path segment of a repository is its namespace, so there is nothing to create",
+      "logs.needHarbor": "Audit logs are a Harbor API; the OCI v2 protocol has no audit endpoint",
       repo: "Repository", tag: "Tag", size: "Size", arch: "Arch/OS", pushed: "Pushed",
       pullCount: "Pull count", tags: "Tags", updated: "Updated", public: "Public",
       untagged: "Untagged artifacts (cleanup)", noVuln: "No vulnerabilities found or scanning disabled", severity: "Severity",
@@ -283,5 +290,8 @@
   IM.applyI18n = function applyI18n() {
     document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = IM.t(el.dataset.i18n)));
     document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => (el.placeholder = IM.t(el.dataset.i18nPlaceholder)));
+    // Icon-only controls carry their label in the tooltip, so it has to follow
+    // the locale like any other visible string.
+    document.querySelectorAll("[data-i18n-title]").forEach((el) => (el.title = IM.t(el.dataset.i18nTitle)));
   }
 })(window.IMREPO = window.IMREPO || {});

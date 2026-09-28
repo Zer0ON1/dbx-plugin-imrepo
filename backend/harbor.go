@@ -129,6 +129,11 @@ type HarborArtifact struct {
 	Tags       []HarborTag       `json:"tags"`
 	Platform   *HarborPlatform   `json:"platform"`
 	References []HarborReference `json:"references"`
+	// Computed from Platform/References by Artifacts(), not decoded — Harbor
+	// sends the parts, the UI wants the answer. It was missing for a while, and
+	// the tag table read it as undefined: the badges showed up on the project
+	// overview (a different struct) and nowhere else.
+	Arches []string `json:"arches,omitempty"`
 }
 
 // arches lists the artifact's architectures, de-duplicated and in a stable
@@ -164,6 +169,9 @@ func (h *HarborClient) Artifacts(ctx context.Context, project, repo string) ([]H
 	var out []HarborArtifact
 	if err := json.Unmarshal(data, &out); err != nil {
 		return nil, err
+	}
+	for i := range out {
+		out[i].Arches = out[i].arches()
 	}
 	return out, nil
 }

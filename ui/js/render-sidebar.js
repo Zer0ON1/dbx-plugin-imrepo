@@ -178,11 +178,18 @@
     const hasProject = !!IM.state.current.project;
     btn.disabled = !(harbor && hasProject);
     btn.title = !harbor ? IM.t("cleanup.needHarbor") : hasProject ? IM.t("cleanup.title") : IM.t("cleanup.needProject");
-    // Harbor-only toolbar actions: a plain v2 registry has no project creation
-    // or audit-log API, so those buttons are hidden rather than shown dead.
+    // Harbor-only actions stay visible but disabled, each saying why: a control
+    // that silently disappears teaches nothing, and "which features exist on
+    // this registry type" is a question the UI should answer.
     const np = IM.$("#btnNewProject");
-    if (np) np.hidden = !harbor;
+    if (np) {
+      np.disabled = !harbor;
+      np.title = harbor ? IM.t("newProject") : IM.t("newProject.needHarbor");
+    }
     const lg = IM.$("#btnLogs");
-    if (lg) lg.hidden = !harbor;
+    if (lg) {
+      lg.disabled = !harbor;
+      lg.title = harbor ? IM.t("logs") : IM.t("logs.needHarbor");
+    }
   }
 })(window.IMREPO = window.IMREPO || {});

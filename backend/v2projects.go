@@ -175,14 +175,20 @@ func (c *OciClient) walkV2Repos(ctx context.Context, refs []v2RepoRef) []v2RepoR
 // archesFor reports the architectures of one image reference. A manifest list
 // answers from its entries; a single-arch manifest from the architecture field
 // of its config blob.
-func archesFor(ctx context.Context, s *Session, repo, ref string) ([]string, error) {
+// archesFor reads one tag's manifest and answers both things the tag tables
+// want from it: the architectures it contains, and its digest.
+//
+// The digest comes along for free — a v2 tags/list carries only names, so
+// showing a sha256 per tag would otherwise cost a separate HEAD per row, and
+// this call already fetches the manifest.
+func archesFor(ctx context.Context, s *Session, repo, ref string) ([]string, string, error) {
 	mr, err := s.Oci.Manifest(ctx, repo, ref)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	var doc map[string]any
 	if err := json.Unmarshal([]byte(mr.Body), &doc); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	seen := map[string]bool{}
 	var out []string
@@ -215,7 +221,7 @@ func archesFor(ctx context.Context, s *Session, repo, ref string) ([]string, err
 			}
 		}
 	}
-	return out, nil
+	return out, mr.Digest, nil
 }
 
 func v2ProjectOverview(ctx context.Context, s *Session, namespace string) (*V2ProjectOverview, error) {
