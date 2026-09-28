@@ -3,6 +3,7 @@
 > 一个 DBX 插件：在同一个工作台里浏览、管理和检查 OCI / Harbor 容器镜像仓库。
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![DBX Store](https://img.shields.io/badge/DBX%20Store-已上架-success)](#安装)
 [![Platforms](https://img.shields.io/badge/platforms-windows%20%7C%20linux%20%7C%20macos%20(x64%2Farm64)-informational)](#安装)
 [![Plugin API](https://img.shields.io/badge/DBX%20Host%20API-1-informational)](https://dbxio.com/cn/docs/plugin-development)
 
@@ -11,10 +12,21 @@
 
 ## 安装
 
-1. 从 [Releases](https://github.com/Zer0ON1/dbx-plugin-imrepo/releases) 下载对应平台的 `.dbxp`：
-   `windows-x64` / `windows-arm64` / `linux-x64` / `linux-arm64` / `darwin-x64` / `darwin-arm64`。
-2. 在 DBX 插件中心开启**「允许安装未签名开发包」**（当前是未签名候选包，见[发布](#发布)）。
-3. 新建连接，选仓库类型（Harbor / Docker Registry v2 / 云厂商托管 …），填地址与认证方式。
+在 DBX 的**插件中心**搜索 **IMREPO** 即可（插件 ID `com.leavingrain.imrepo`）。商店中的包由 DBX Store
+签名，安装时会验证，**不需要开启任何"允许未签名开发包"的开关**。
+
+<details>
+<summary>手动安装 / 指定版本</summary>
+
+从 [Releases](https://github.com/Zer0ON1/dbx-plugin-imrepo/releases) 下载对应平台的 `.dbxp`：
+`windows-x64` / `windows-arm64` / `linux-x64` / `linux-arm64` / `darwin-x64` / `darwin-arm64`，
+然后在插件中心开启**「允许安装未签名开发包」**。
+
+Release 里放的是**未签名候选包**（即上架用的输入，见[发布](#发布)），内容与商店中的签名包相同；
+这条路适合商店版本暂不可用、或需要固定某个版本的时候。
+</details>
+
+装好后新建连接，选仓库类型（Harbor / Docker Registry v2 / 云厂商托管 …），填地址与认证方式。
 
 Sidecar 是**静态链接**的 Go 二进制（`CGO_ENABLED=0`），不依赖目标机 libc。CI 在
 **ubuntu / windows / macos 三个真实 runner** 上各自跑一遍完整测试套件（测的就是发布用的那批字节），
@@ -139,12 +151,26 @@ dbx-plugin-imrepo/
 
 ## 发布
 
-推一个 `v*` tag 并创建 GitHub Release，CI（`.github/workflows/plugin-release.yml`）会：跑全量测试
-→ 交叉编译六个平台 → 把每个 `.dbxp` 与汇总的 `release-candidates.json` 传到该 Release。
+已上架 **DBX 官方商店**（插件 ID `com.leavingrain.imrepo`）。商店条目与签名产物列表见
+[`catalog/index.json`](https://dl.dbxio.com/catalog/index.json)（`dl.dbxio.com` 上的包由 DBX Store
+签名，DBX 安装前会验证该签名）。
 
-- **`.dbxp` 不提交进 Git**（`dist/` 已忽略），只作为 Release 附件。
-- `release-candidates.json` 是 `dbx-store` 自动更新工作流读取的清单。
-- 当前是**未签名候选包**，安装需在插件中心开启「允许安装未签名开发包」。
+发一个新版本：
+
+1. 改 `manifest.json` 的 `version`（唯一需要改的地方，见 [`docs/DESIGN.md`](docs/DESIGN.md#版本号只需改一个地方)）
+2. 推一个 `v*` tag，并**创建 GitHub Release**——CI（`.github/workflows/plugin-release.yml`）会跑全量测试
+   → 交叉编译六个平台 → 把 6 个 `.dbxp` 与汇总的 `release-candidates.json` 传到该 Release
+3. 候选元数据提交给 [t8y2/dbx-store](https://github.com/t8y2/dbx-store)（首次是手工 PR；登记
+   `autoUpdate: true` 后由同步工作流自动开 PR）
+4. 维护者审核后跑签名工作流：校验字节 → 签名 → 发布到 `dl.dbxio.com` → 更新目录条目
+
+几个约束值得记住：
+
+- **`.dbxp` 不提交进 Git**（`dist/` 已忽略），只作为 Release 附件。Release 上是**未签名候选包**，
+  商店分发的是签名后的副本。
+- **Release 附件一旦上传就不可修改**。字节变了（哪怕只是重新打包），候选里的 `sha256`/`size` 就对不上，
+  签名会直接拒绝——必须**重发 Release 并更新候选元数据**。
+- 候选元数据里的 `id`/`version`/`publisher` 必须与包内 `manifest.json` 一致，否则同样被拒。
 
 ## 文档
 
