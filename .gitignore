@@ -8,6 +8,7 @@
 /.dbx-dev/
 /.probe/
 /build-linux.mod
+/build-packages.mod
 
 # Screenshots rendered from the preview mock. They show whatever example data
 # the mock carries, which may describe a real environment — keep them out of the

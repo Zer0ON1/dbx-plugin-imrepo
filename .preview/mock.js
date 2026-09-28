@@ -506,6 +506,14 @@
       setTimeout(() => byText(raceRepo, "lvl2")?.click(), 700);
       setTimeout(() => byText("audit-api", "lvl2")?.click(), 1100);
     }
+    if (params.get("revisit")) {
+      // Leave the repository the driver opened, then come back to it. The second
+      // visit is a cache hit, which is where the architecture badges used to
+      // disappear: a cache hit resolves without suspending, so the paint ran
+      // before the caller had attached the slot it was painting into.
+      setTimeout(() => byText("docs-api", "lvl2")?.click(), 700);
+      setTimeout(() => byText("ledger-api", "lvl2")?.click(), 1600);
+    }
     const clickRepo = params.get("clickrepo");
     if (clickRepo) {
       // Click a repository long after the background prefetch has finished, so a

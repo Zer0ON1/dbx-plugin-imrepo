@@ -145,11 +145,22 @@
       }
       info = await p;
     }
-    if (slot.isConnected && info.arches.length) {
+    // Deliberately NOT guarded by slot.isConnected.
+    //
+    // A cache hit resolves without ever suspending, so the function runs to
+    // completion before the caller has appended the slot — every table builds
+    // the row detached and attaches it afterwards, which is the normal way to
+    // build a table. Guarding on isConnected therefore rejected exactly the case
+    // it was meant to allow: badges appeared on the first visit (cache miss, the
+    // await gave the caller time to attach) and vanished on every later one.
+    // Painting into a slot that has since been detached is harmless — that node
+    // is no longer displayed, and the current table has its own slot, filled by
+    // its own call.
+    if (info.arches.length) {
       slot.innerHTML = "";
       info.arches.forEach((a) => slot.appendChild(IM.archBadge(a)));
     }
-    if (digestSlot && digestSlot.isConnected && info.digest) {
+    if (digestSlot && info.digest) {
       digestSlot.textContent = IM.shortDigest(info.digest);
       digestSlot.title = info.digest;
     }

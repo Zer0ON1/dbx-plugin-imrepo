@@ -466,6 +466,25 @@ def main() -> int:
               any(r.startswith("registry/arches") for r in probe_requests(dom)),
               f"no fallback read: {probe_requests(dom)[:8]}")
 
+        print("\nN) architectures survive leaving a repository and coming back")
+        # Reported from use: the badges were there on first view and gone after
+        # switching to another image and back. The paint was guarded by
+        # slot.isConnected, and a cache hit — every visit after the first —
+        # resolves without suspending, so it ran before the caller had attached
+        # the slot. A guard meant to skip detached nodes skipped the live one.
+        dom = browser.dom("theme=light&revisit=1", 8000)
+        check("the workbench is back on the first repository",
+              "ledger-api-1" in dom and "docs-api-1" not in dom,
+              "the revisit driver did not end up where expected")
+        # Counted, not just "some badge exists": only the rows whose payload
+        # carries no `arches` go through the lazy read, and the first two rows
+        # render their badges straight from the fixture — so a loose assertion
+        # passes while the third row silently loses its badges. Three rows, two
+        # architectures each.
+        badges = dom.count('class="arch-badge mono"')
+        check("every row still shows both architectures after returning",
+              badges == 6, f"{badges} badge(s) on screen, expected 6")
+
     except BrowserStalled as stalled:
         sys.exit(f"UI harness failed: {stalled}")
     finally:

@@ -4,6 +4,24 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
+## Unreleased
+
+**Architecture badges disappeared on the second visit to a repository.** First
+view was fine; switch to another image and back and they were gone.
+
+The lazy read was guarded by `slot.isConnected`, and the guard rejected exactly
+the case it was meant to allow. A cache hit resolves without ever suspending, so
+the function completed before the caller had appended the slot — and every table
+here builds a row detached and attaches it afterwards, which is the normal way to
+build one. On a cache miss the await gave the caller time to attach, so the first
+visit painted and every later one did not.
+
+The read now paints unconditionally; a slot that has since been detached is
+simply no longer displayed. Covered by a test that leaves a repository and comes
+back and counts the badges, because the rows whose payload already carries
+architectures render theirs directly — a looser assertion passed while the lazy
+row silently lost its badges.
+
 ## 0.1.2
 
 Everything here came from using the plugin against a real Harbor rather than the
