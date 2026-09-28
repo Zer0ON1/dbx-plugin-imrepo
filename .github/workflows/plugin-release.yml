@@ -192,6 +192,14 @@ jobs:
           # --repo is required: this job has no checkout, so gh cannot find a git
           # remote to infer the repository from and fails with "not a git
           # repository". It did exactly that on the first release.
+          #
+          # A tag is not a release. `gh release upload` needs the release to
+          # exist, and says only "release not found" when it does not — which
+          # reads like a workflow bug rather than a missing step.
+          if ! gh release view "$RELEASE_TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "::error::No release exists for tag $RELEASE_TAG. Publish it in the GitHub UI first (Releases → Draft a new release → choose the existing tag), then run this again — packages can only be attached to an existing release."
+            exit 1
+          fi
           find artifacts -type f \( -name '*.dbxp' -o -name 'release-candidates.json' \) | while read -r f; do
             gh release upload "$RELEASE_TAG" "$f" --repo "${{ github.repository }}" --clobber
           done
