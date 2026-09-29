@@ -138,11 +138,15 @@ RETENTION = {"id": 12, "algorithm": "or",
 V2_AUTH: list[str] = []
 PROJECT_SCANNER = {"uuid": ""}
 QUOTA_HARD = {"storage": -1}
+# project_id is what Harbor filters on, so the rows carry it; the last one belongs
+# to a different project, which makes a project filter observably selective rather
+# than a pass-through that happens to return everything.
 AUDIT_LOGS = [
-    {"id": 4, "op_time": ago(0), "operation": "pull", "resource": "payments/auth-api:v1.4.2", "username": "admin"},
-    {"id": 3, "op_time": ago(2), "operation": "pull", "resource": "payments/gateway:2026-09-21", "username": "ci-robot"},
-    {"id": 2, "op_time": ago(5), "operation": "push", "resource": "payments/auth-api:2026-09-18", "username": "ci-robot"},
-    {"id": 1, "op_time": ago(10), "operation": "delete", "resource": "payments/docs-api@sha256:44aa", "username": "developer1"},
+    {"id": 4, "project_id": 1, "op_time": ago(0), "operation": "pull", "resource": "payments/auth-api:v1.4.2", "username": "admin"},
+    {"id": 3, "project_id": 1, "op_time": ago(2), "operation": "pull", "resource": "payments/gateway:2026-09-21", "username": "ci-robot"},
+    {"id": 2, "project_id": 1, "op_time": ago(5), "operation": "push", "resource": "payments/auth-api:2026-09-18", "username": "ci-robot"},
+    {"id": 1, "project_id": 1, "op_time": ago(10), "operation": "delete", "resource": "payments/docs-api@sha256:44aa", "username": "developer1"},
+    {"id": 0, "project_id": 9, "op_time": ago(12), "operation": "push", "resource": "other/repo:v1", "username": "someone"},
 ]
 PROJECTS_CREATED: list[dict] = []
 
@@ -166,10 +170,12 @@ V2_MANIFEST = {
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    def _send(self, obj, code=200):
+    def _send(self, obj, code=200, headers=None):
         body = json.dumps(obj).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -193,9 +199,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path.startswith("/service/token"):
             return self._send({"token": "fixture-token", "expires_in": 1800})
         if path.startswith("/api/v2.0/audit-logs"):
+            # Harbor filters audit logs through `q` only — it has no top-level
+            # project_id or operation parameter, and silently ignores both. The
+            # fixture therefore reads the same way the server does, so a request
+            # that used the lone parameters would come back unfiltered here too.
             qs = urllib.parse.parse_qs(query)
-            op = (qs.get("operation") or [""])[0]
-            return self._send([l for l in AUDIT_LOGS if not op or l["operation"] == op])
+            filters = {}
+            for part in (qs.get("q") or [""])[0].split(","):
+                if "=" in part:
+                    k, _, v = part.partition("=")
+                    filters[k.strip()] = v.strip()
+            rows = AUDIT_LOGS
+            if filters.get("project_id"):
+                rows = [l for l in rows if str(l.get("project_id")) == filters["project_id"]]
+            if filters.get("operation"):
+                rows = [l for l in rows if l["operation"] == filters["operation"]]
+            # Parse counts come back in the header, which is where the pager gets
+            # its page count.
+            return self._send(rows, headers={"X-Total-Count": str(len(rows))})
         if path.startswith("/api/v2.0/quotas"):
             return self._send([{"id": 7, "hard": QUOTA_HARD, "used": {"storage": 214643506}}])
         if path.startswith("/api/v2.0/scanners"):

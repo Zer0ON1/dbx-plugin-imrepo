@@ -4,6 +4,44 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
+## Unreleased
+
+**The audit-log scope and operation filters did nothing.** Harbor's audit-log
+endpoint takes only `q`/`sort`/`page`/`page_size`: its swagger lists those four
+and `ListAuditLogs` reads only `Q`. The plugin sent `project_id` and `operation`
+as top-level parameters, which Harbor accepts and ignores, so every filter
+looked inert. Both now travel inside `q`, comma separated. Measured against a
+live Harbor: `operation=pull` returned the unfiltered 172,173 rows while
+`q=operation=pull` returned 139,738.
+
+The same mistake was in the overview's pull counts and most-pulled ranking,
+which had been counting *every* audit entry in the window rather than pulls.
+That one nobody had reported; the fixture was corrected first, and the numbers
+moved.
+
+**The layers dialog showed the platform as a bare "/".** The two parts were
+joined with a slash whether or not they existed. A single-arch manifest carries
+no platform — only a manifest list does — so the backend now reads it from the
+config blob, which it was already fetching, and the dialog prints a dash rather
+than a slash when it genuinely does not know.
+
+**Deleting a tag left the tree's counts stale.** The counts beside each
+repository come from the repository listing, and a mutation invalidated only the
+artifact listing — so the sidebar kept the pre-delete numbers, and leaving the
+project and returning within the cache window served that same listing again.
+Mutations now re-read it.
+
+**Log dialog: page size, real page count, and a jump box.** The pager could only
+step forward blindly; a full page and the last page looked identical. Harbor
+reports the total in `X-Total-Count`, so the dialog now shows "page N of M",
+lets you pick 20/50/100 rows, and jump to a page. The dialog is wider so
+time/operation/resource/user fit on one line.
+
+**New: registry garbage collection.** Settings gains a GC section for Harbor:
+what is scheduled now (type, cron, next run, last status, parameters), editing
+it, and a two-step "run GC now". This is Harbor's own GC — the untagged cleanup
+deletes artifacts, and GC is what reclaims the blobs those deletions orphan.
+
 ## 0.1.3
 
 **Architecture badges disappeared on the second visit to a repository.** First

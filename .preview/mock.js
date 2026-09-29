@@ -282,6 +282,16 @@
     "harbor/memberRemove": { ok: true },
     "harbor/retentionSave": { ok: true, retentionId: 12 },
     "harbor/userAdmin": { ok: true },
+    "harbor/deleteTag": { ok: true },
+    "registry/delete": { ok: true },
+    "harbor/gcGet": {
+      configured: true, id: 14, type: "Daily", cron: "0 0 0 * * *",
+      nextScheduledAt: "2026-09-30T00:00:00.000Z", lastStatus: "Success",
+      createdAt: "2025-12-10T15:13:01.347Z", updatedAt: "2025-12-10T15:13:01.347Z",
+      parameters: { delete_untagged: true, workers: 1 },
+    },
+    "harbor/gcSet": { ok: true, message: "GC schedule updated" },
+    "harbor/gcTrigger": { ok: true, message: "GC started" },
     "harbor/userCreate": { ok: true },
     "harbor/userPassword": { ok: true },
     "harbor/userDelete": { ok: true },
@@ -291,7 +301,11 @@
         ? { user_id: 2, username: "developer1", email: "dev1@example.com", sysadmin_flag: false }
         : { user_id: 1, username: "admin", email: "admin@example.com", sysadmin_flag: true },
     },
-    "registry/layers": LAYERS,
+    "registry/layers": params.get("layersnoplatform")
+      // An image whose platform cannot be determined: the reported symptom was
+      // the dialog rendering a bare "/" for it.
+      ? { ...LAYERS, platform: {} }
+      : LAYERS,
     "registry/catalog": mode === "docker" ? V2_CATALOG : REPOS.map((r) => r.full_name),
     "registry/namespaces": V2_NAMESPACES,
     "registry/overview": {
@@ -438,16 +452,37 @@
       }
       // Settings round-trip: the harness keeps a copy so the modal shows what was
       // saved, and the policy markers downstream match.
+      if (method === "harbor/gcGet") {
+        return params.get("gcnone")
+          ? { configured: false }
+          : JSON.parse(JSON.stringify(RESPONSES["harbor/gcGet"]));
+      }
+      if (method === "harbor/deleteTag" || method === "registry/delete") {
+        // The repository listing carries the counts the tree renders; a delete
+        // that leaves them untouched would make "did the tree refresh?" a
+        // question with two identical answers.
+        const r = REPOS.find((x) => x.name === ((p && p.repository) || ""));
+        if (r && typeof r.artifact_count === "number" && r.artifact_count > 0) r.artifact_count -= 1;
+        return { ok: true };
+      }
       if (method === "harbor/logs") {
         const all = RESPONSES["harbor/logs"].logs;
         // This mock stands in for the sidecar, so it receives what the UI sends
-        // — a project NAME — and has to resolve it the way the backend does
-        // (ProjectDetail). Filtering here on the backend's internal `q` parameter
+        // — a project NAME and an operation — and resolves them the way the
+        // backend does. Filtering here on the backend's internal `q` parameter
         // would test nothing: the UI never sends it.
         const name = (p && p.project) || "";
-        const pid = name ? (RESPONSES["harbor/projectAdmin"].project.projectId) : null;
-        const rows = pid ? all.filter((l) => l.project_id === pid) : all;
-        return { logs: rows, page: 1, pageSize: 50 };
+        const pid = name ? RESPONSES["harbor/projectAdmin"].project.projectId : null;
+        const op = (p && p.operation) || "";
+        let rows = all;
+        if (pid) rows = rows.filter((l) => l.project_id === pid);
+        if (op) rows = rows.filter((l) => l.operation === op);
+        const size = Number((p && p.pageSize) || 50);
+        const page = Number((p && p.page) || 1);
+        return {
+          logs: rows.slice((page - 1) * size, page * size),
+          page, pageSize: size, total: rows.length,
+        };
       }
       if (method === "harbor/userAdmin") {
         // Flip the fixture, not just acknowledge: the panel re-reads the user
@@ -635,6 +670,16 @@
     }
     const logScope = params.get("logscope");
     if (logScope) {
+      const logOp = params.get("logop");
+      if (logOp) {
+        setTimeout(() => {
+          const sels = document.querySelectorAll("#logsBody .logs-bar select");
+          const opSel = sels[1];
+          if (!opSel) return;
+          opSel.value = logOp;
+          opSel.dispatchEvent(new Event("change", { bubbles: true }));
+        }, 1600);
+      }
       // Pick the project in the scope selector once the dialog has rendered.
       setTimeout(() => {
         const sel = document.querySelector("#logsBody .logs-bar select");
@@ -750,7 +795,14 @@
       if (!btns || !btns.length) return;
       const order = { retag: 0, layers: 1, vuln: 2 }; // per-row action order
       if (openModal in order) btns[Math.min(order[openModal], btns.length - 1)].click();
-      else if (openModal === "delete") btns[btns.length - 1].click();
+      else if (openModal === "delete") {
+        btns[btns.length - 1].click();
+        if (params.get("confirmdelete")) {
+          // Completing the deletion is what exercises the refresh path: the tree's
+          // counts come from the repository listing, which a delete has to re-read.
+          setTimeout(() => document.getElementById("btnDeleteConfirm")?.click(), 700);
+        }
+      }
       // Layers dialog: [0] = as built, [1] = by size.
       if (openModal === "layers" && params.get("layersort") === "size") {
         setTimeout(() => document.querySelectorAll("#layersBody .layer-toolbar .btn")[1]?.click(), 1400);

@@ -133,7 +133,14 @@
       IM.renderUserManagement(secU);
     }
 
-    /* 5 — about */
+    /* 5 — registry garbage collection (Harbor admin) */
+    if (IM.state.mode === "harbor") {
+      const secG = IM.setSection("gc.title", "gc.desc");
+      body.appendChild(secG);
+      IM.renderGCSection(secG);
+    }
+
+    /* 6 — about */
     body.appendChild(IM.renderAbout());
   }
 

@@ -14,7 +14,10 @@
 
   IM.openLogs = async function openLogs() {
     IM.$("#logsModal").hidden = false;
-    IM.state.logs = { page: 1, op: "", scope: IM.state.current.project || "", rows: [], pageSize: 50 };
+    IM.state.logs = {
+      page: 1, op: "", scope: IM.state.current.project || "",
+      rows: [], total: 0, pageSize: 50,
+    };
     await IM.renderLogs();
   }
 
@@ -55,6 +58,7 @@
       body.innerHTML = "";
       body.appendChild(bar);
       st.rows = r.logs || [];
+      st.total = Number(r.total || 0) || (r.logs || []).length;
 
       if (!st.rows.length) {
         body.appendChild(IM.el("p", "muted", IM.t("logs.empty")));
@@ -82,15 +86,58 @@
       tbl.appendChild(tb);
       body.appendChild(tbl);
 
-      /* pager: Harbor returns at most pageSize rows per page */
+      /* pager: page size, where you are, and a way to jump.
+         The total comes from Harbor (X-Total-Count), so the page count is real
+         rather than inferred from whether the page happened to be full. */
+      const pages = Math.max(1, Math.ceil(st.total / st.pageSize));
       const pager = IM.el("div", "set-actions logs-pager");
+
+      const info = IM.el("span", "pager-info", IM.t("logs.pageOf")
+        .replace("{n}", String(st.page)).replace("{total}", String(pages))
+        + "  ·  " + IM.t("logs.total").replace("{n}", String(st.total)));
+      pager.appendChild(info);
+
+      const sizeSel = IM.el("select", "set-select");
+      [20, 50, 100].forEach((n) => {
+        const o = IM.el("option", "", String(n));
+        o.value = String(n);
+        sizeSel.appendChild(o);
+      });
+      sizeSel.value = String(st.pageSize);
+      sizeSel.title = IM.t("logs.page");
+      sizeSel.addEventListener("change", () => {
+        st.pageSize = Number(sizeSel.value);
+        st.page = 1;                       // a different page size re-slices, so page 1
+        IM.renderLogs();
+      });
+      pager.append(IM.el("span", "k", IM.t("logs.page")), sizeSel);
+
       const prev = IM.el("button", "btn btn-outline btn-sm", IM.t("logs.prev"));
       prev.disabled = st.page <= 1;
       prev.addEventListener("click", () => { st.page--; IM.renderLogs(); });
+
       const next = IM.el("button", "btn btn-outline btn-sm", IM.t("logs.next"));
-      next.disabled = st.rows.length < st.pageSize;
+      next.disabled = st.page >= pages;
       next.addEventListener("click", () => { st.page++; IM.renderLogs(); });
       pager.append(prev, next);
+
+      const jumpWrap = IM.el("span", "pager-jump");
+      const jump = IM.el("input", "set-input");
+      jump.type = "number";
+      jump.min = "1";
+      jump.max = String(pages);
+      jump.placeholder = String(st.page);
+      const go = IM.el("button", "btn btn-outline btn-sm", IM.t("logs.jumpGo"));
+      const doJump = () => {
+        const n = Math.floor(Number(jump.value));
+        if (!n || n < 1 || n > pages) { IM.toast(IM.t("logs.pageInvalid"), "warn"); return; }
+        st.page = n;
+        IM.renderLogs();
+      };
+      go.addEventListener("click", doJump);
+      jump.addEventListener("keydown", (e) => { if (e.key === "Enter") doJump(); });
+      jumpWrap.append(IM.el("span", "", IM.t("logs.jump")), jump, go);
+      pager.appendChild(jumpWrap);
       body.appendChild(pager);
     } catch (e) {
       body.innerHTML = "";

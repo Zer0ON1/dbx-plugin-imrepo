@@ -161,6 +161,7 @@
       if ((r.failed || []).length) parts.push(`${IM.t("cleanup.failedCount")} ${r.failed.length}`);
       IM.toast(parts.join(" · "), (r.failed || []).length ? "err" : "ok");
       IM.invalidate(IM.currentKey());
+      IM.refreshTree();   // cleanup removes artifacts, so the counts move
       IM.reloadContent();
     } catch (e) {
       IM.toast(e.message || IM.t("failed"), "err");

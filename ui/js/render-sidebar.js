@@ -143,6 +143,29 @@
    * collapsed case: collapsing clears `repos`. Clicking a row that is already in
    * the tree therefore costs nothing.
    */
+  /**
+   * Re-reads the current project's repository listing and repaints the tree.
+   *
+   * The counts beside each repository come from that listing, and a mutation
+   * (delete a tag, rename, clean up untagged artifacts) invalidated only the
+   * artifact listing — so the sidebar kept the numbers it had when the project
+   * was expanded. Leaving the project and coming back served the very same
+   * cached listing, which is what made it look permanent rather than stale.
+   */
+  IM.refreshTree = async function refreshTree() {
+    const project = IM.state.current.project;
+    if (!project || IM.state.expandedProject !== project) return;
+    IM.invalidate(IM.cacheKey("repos", project, ""));
+    try {
+      IM.state.repos = IM.state.mode === "harbor"
+        ? await IM.fetchCached("repos", project, "", "harbor/repositories", { project })
+        : await IM.fetchCached("repos", project, "", "registry/repositories", { namespace: project });
+    } catch (_) {
+      // Keep the rows we have; the content pane already reported the mutation.
+    }
+    IM.renderSidebar();
+  }
+
   IM.ensureProjectExpanded = async function ensureProjectExpanded(name) {
     if (!name) return;
     IM.state.expandedProject = name;

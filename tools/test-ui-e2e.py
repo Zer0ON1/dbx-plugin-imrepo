@@ -466,6 +466,83 @@ def main() -> int:
               any(r.startswith("registry/arches") for r in probe_requests(dom)),
               f"no fallback read: {probe_requests(dom)[:8]}")
 
+        print("\nM9) the GC section reads and edits Harbor's schedule")
+        dom = browser.dom("theme=light&modal=settings", 7000)
+        check("the settings panel has a GC section", "镜像回收" in dom or "garbage collection" in dom,
+              "no GC section")
+        check("it shows what is scheduled now",
+              "0 0 0 * * *" in dom and ("下次执行" in dom or "Next run" in dom),
+              "the current schedule is not shown")
+        check("it offers a schedule type and a concurrency control",
+              "gc-row" in dom and "1-10" in dom, "controls missing")
+        check("it offers a manual run", ("立即执行 GC" in dom or "Run GC now" in dom))
+        dom = browser.dom("theme=light&modal=settings&gcnone=1", 7000)
+        check("an unconfigured registry says so instead of erroring",
+              ("尚未配置" in dom or "No GC schedule" in dom), "no empty state")
+
+        print("\nM8) deleting a tag re-reads the counts the tree shows")
+        # Reported from use: after deleting a tag the sidebar kept its old number,
+        # and leaving the project and coming back showed the same one — the
+        # repository listing was still the cached copy, and only the artifact
+        # listing had been invalidated.
+        dom = browser.dom("theme=light&probe=1&modal=delete&confirmdelete=1", 9000)
+        reqs = probe_requests(dom)
+        listing_reads = [r for r in reqs if r.startswith("harbor/repositories")]
+        check("the delete completed", any(r.startswith("harbor/deleteTag") for r in reqs) or
+              any(r.startswith("registry/delete") for r in reqs), f"requests: {reqs[-8:]}")
+        check("the repository listing is re-read after the deletion",
+              len(listing_reads) >= 2,
+              f"listing read {len(listing_reads)} time(s): {listing_reads}")
+        # And the number the user actually looks at has moved: the fixture counts
+        # down on a delete, so a stale tree would still show the old value.
+        row = re.search(r'tree-item lvl2[^>]*>.*?ledger-api.*?class="meta">(\d+)<', dom, re.S)
+        shown = row.group(1) if row else None
+        check("the count beside the repository reflects the deletion",
+              shown == "4", f"tree shows {shown!r}, expected the decremented count")
+
+        print("\nM7) the layers dialog names the platform, or says it does not know")
+        # Reported from use: the platform line read "/" — the parts were joined
+        # with a slash even when both were missing.
+        dom = browser.dom("theme=light&modal=layers", 6000)
+        check("the platform is shown as os/arch when known",
+              "linux/amd64" in dom, "platform line missing or malformed")
+        dom = browser.dom("theme=light&modal=layers&layersnoplatform=1", 6000)
+        # Read the line itself. A looser "no slash nearby" check passed with the
+        # bug still in place, which is worse than no check at all.
+        line = re.search(r"(平台|Platform)\s*:\s*([^<]*)", dom)
+        shown = (line.group(2) if line else "").strip()
+        check("an unknown platform reads as a dash, never a bare slash",
+              shown == "—", f"platform line rendered as {shown!r}")
+
+        print("\nM6) the audit log filters and paginates")
+        def log_dom(query):
+            page = browser.dom(query, 7000)
+            body = re.search(r'id="logsBody".*?(?=<div class="modal-footer")', page, re.S)
+            seg = body.group(0) if body else ""
+            return seg, seg.count("<tr>")
+
+        # Scope: the dialog opens on the current project; 全部 must return more.
+        scoped, scoped_rows = log_dom("theme=light&openlogs=1")
+        everything, all_rows = log_dom("theme=light&openlogs=1&logscope=all")
+        check("the default view is scoped to the current project",
+              "第 1 /" in scoped or "Page 1 of" in scoped, "no pager shown")
+        check("choosing everything returns more rows than the project view",
+              all_rows > scoped_rows, f"all={all_rows} vs scoped={scoped_rows}")
+
+        # Operation filter: must change what comes back.
+        pulls, pull_rows = log_dom("theme=light&openlogs=1&logscope=all&logop=pull")
+        check("filtering by operation narrows the list",
+              0 < pull_rows < all_rows, f"operation=pull gave {pull_rows} of {all_rows}")
+        check("...and every row is that operation",
+              "log-op-pull" in pulls and "log-op-push" not in pulls,
+              "rows of other operations survived the filter")
+
+        # Pagination: size selector, real page count, and a jump box.
+        check("the pager shows the page size selector", "set-select" in scoped)
+        check("the pager reports a real page count from the server total",
+              "共" in scoped or "entries" in scoped, "no total shown")
+        check("the pager offers a jump box", "pager-jump" in scoped)
+
         print("\nM5) opening a repository from the content pane expands the tree")
         # Reported from use: with the project collapsed, clicking an image on the
         # right showed the tag page while the tree stayed shut — the highlighted

@@ -379,6 +379,9 @@ html, body {
 }
 .modal-wide { width: 720px; }
 .modal-xwide { width: 880px; }
+/* The audit log puts time/operation/resource/user on one row; 880px wrapped the
+   resource column onto its own line. */
+.modal-logwide { width: 1180px; }
 .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--im-border); }
 .modal-header h3 { margin: 0; font-size: 15px; color: var(--im-fg); }
 .modal-body { padding: 20px; overflow-y: auto; color: var(--im-fg); --im-scroll-pad-top: 20px; }
@@ -675,9 +678,22 @@ html, body {
 .ov-chart .muted { margin: 0; }
 
 /* ---------- Audit logs ---------- */
+/* Registry GC section: label/control rows, matching the settings panel's frame. */
+.gc-box { display: flex; flex-direction: column; gap: 6px; }
+.gc-form { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.gc-row { display: flex; align-items: center; gap: 10px; }
+.gc-row .k { font-size: 12px; color: var(--im-fg-muted); min-width: 92px; }
+.gc-row .set-input { width: 200px; height: 30px; }
+.gc-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--im-fg); }
+.gc-check .set-input { width: 72px; height: 28px; }
+
 .logs-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .logs-bar .k { font-size: 12px; color: var(--im-fg-muted); white-space: nowrap; }
-.logs-pager { margin-top: 10px; justify-content: flex-end; }
+.logs-pager { margin-top: 10px; justify-content: flex-end; align-items: center; gap: 8px; }
+.logs-pager .pager-info { margin-right: auto; font-size: 12px; color: var(--im-fg-muted); font-variant-numeric: tabular-nums; }
+.logs-pager .pager-jump { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--im-fg-muted); }
+.logs-pager .pager-jump input { width: 62px; height: 26px; text-align: center; }
+.logs-bar select { max-width: 260px; }
 .log-op { text-transform: uppercase; letter-spacing: .04em; }
 .log-op-pull { background: var(--im-primary-soft); color: var(--im-primary); }
 .log-op-push { background: var(--im-success-soft); color: var(--im-success); }

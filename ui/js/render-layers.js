@@ -39,7 +39,13 @@
     const biggest = layers.reduce((a, l) => ((l.size || 0) > (a ? a.size || 0 : -1) ? l : a), null);
 
     const sum = IM.el("div", "layer-summary");
-    sum.appendChild(IM.el("span", "", IM.t("layersPlatform") + ": " + (r.platform ? ((r.platform.os || "") + "/" + (r.platform.architecture || "")) : "—")));
+    // Only join the parts that exist: "os/arch" with both missing rendered as a
+    // bare "/", which reads as a broken value rather than absent information.
+    const os = (r.platform && r.platform.os) || "";
+    const arch = (r.platform && r.platform.architecture) || "";
+    const variant = (r.platform && r.platform.variant) || "";
+    const plat = [os, arch].filter(Boolean).join("/") + (variant ? "/" + variant : "");
+    sum.appendChild(IM.el("span", "", IM.t("layersPlatform") + ": " + (plat || "—")));
     sum.appendChild(IM.el("span", "", IM.t("layersCount") + ": " + layers.length));
     sum.appendChild(IM.el("span", "strong", IM.t("layersTotal") + ": " + IM.fmtSize(total)));
     if (biggest) sum.appendChild(IM.el("span", "", IM.t("layersBiggest") + ": " + IM.fmtSize(biggest.size)));

@@ -118,10 +118,15 @@ var sessionMethods = map[string]sessionHandler{
 	"harbor/quotaSet":         quotaSet,
 	"harbor/retentionSave":    harborOnly(saveRetention),
 	"harbor/logs":             harborLogs,
-	"harbor/overview":         registryOverview,
-	"harbor/memberAdd":        harborOnly(addMember),
-	"harbor/memberRole":       harborOnly(harborMemberRole),
-	"harbor/memberRemove":     harborOnly(harborMemberRemove),
+	// Harbor's own registry GC — what reclaims the blobs that artifact
+	// deletions orphan.
+	"harbor/gcGet":        harborOnly(func(ctx context.Context, s *Session, _ map[string]any) (any, error) { return gcGet(ctx, s) }),
+	"harbor/gcSet":        harborOnly(gcSet),
+	"harbor/gcTrigger":    harborOnly(gcTrigger),
+	"harbor/overview":     registryOverview,
+	"harbor/memberAdd":    harborOnly(addMember),
+	"harbor/memberRole":   harborOnly(harborMemberRole),
+	"harbor/memberRemove": harborOnly(harborMemberRemove),
 
 	// user management
 	"harbor/users":        harborOnly(func(ctx context.Context, s *Session, _ map[string]any) (any, error) { return s.Harbor.Users(ctx) }),

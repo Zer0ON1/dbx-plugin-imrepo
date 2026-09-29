@@ -108,6 +108,17 @@ func analyzeManifest(ctx context.Context, s *Session, repo, ref string) (any, er
 		if blob, err := s.Oci.Blob(ctx, repo, cfgDigest); err == nil {
 			var cfgDoc map[string]any
 			if json.Unmarshal(blob, &cfgDoc) == nil {
+				// A single-arch manifest carries no platform of its own — only a
+				// manifest list does. The config blob names it, and this read is
+				// already happening, so an image without an index still reports
+				// what it is instead of showing an empty pair.
+				if len(platform) == 0 {
+					for _, key := range []string{"os", "architecture", "variant"} {
+						if v, ok := cfgDoc[key].(string); ok && v != "" {
+							platform[key] = v
+						}
+					}
+				}
 				if hist, ok := cfgDoc["history"].([]any); ok {
 					for _, h := range hist {
 						hm, ok := h.(map[string]any)

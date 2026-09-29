@@ -193,6 +193,7 @@
         if (r && r.warning) IM.toast(r.warning, "warn");
         else IM.toast(r && r.sourceRemoved ? IM.t("retag.renamed") : IM.t("retag.copied"), "ok");
         IM.invalidate(IM.currentKey());   // this repository's listing just changed
+        IM.refreshTree();
         IM.reloadContent();
       } catch (e) {
         IM.toast(e.message || IM.t("failed"), "err");
@@ -216,6 +217,9 @@
         IM.$("#deleteModal").hidden = true;
         IM.toast(IM.t("done"), "ok");
         IM.invalidate(IM.currentKey());   // the listing is stale the moment we delete
+        // The tree's counts came from the repository listing, which was not
+        // invalidated — so the sidebar kept showing the pre-delete numbers.
+        IM.refreshTree();
         IM.reloadContent();
       } catch (e) {
         IM.toast(e.message || IM.t("failed"), "err");

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -180,23 +181,29 @@ func harborLogs(ctx context.Context, s *Session, params map[string]any) (any, er
 	q := url.Values{}
 	q.Set("page", fmt.Sprintf("%d", maxInt(intParam(params, "page"), 1)))
 	q.Set("page_size", fmt.Sprintf("%d", clampInt(intParam(params, "pageSize"), 10, 100, 50)))
-	if op := strings.TrimSpace(strParam(params, "operation")); op != "" {
-		q.Set("operation", op)
-	}
+
+	// Every filter has to travel inside the single `q` parameter, comma
+	// separated. Harbor's audit-log endpoint takes q/sort/page/page_size and
+	// nothing else — its swagger lists exactly those four, and ListAuditLogs
+	// reads only Q — so a top-level `project_id` or `operation` is accepted and
+	// then ignored, and the view looks unfiltered. Measured against a live
+	// Harbor: `operation=pull` returned the unfiltered 172,173 rows, while
+	// `q=operation=pull` returned 139,738.
+	var filters []string
 	if project := strings.TrimSpace(strParam(params, "project")); project != "" {
 		detail, err := s.Harbor.ProjectDetail(ctx, project)
 		if err != nil {
 			return nil, err
 		}
-		// Harbor's audit-log endpoint takes q/sort/page/page_size and nothing
-		// else — there is no project_id parameter (checked against the swagger
-		// and ListAuditLogs' signature, which reads only Q). A top-level
-		// project_id is therefore ignored in silence, and picking a project
-		// returned the same rows as everything else. Project scoping goes
-		// through the q filter, matching the model's column name.
-		q.Set("q", fmt.Sprintf("project_id=%d", detail.ProjectID))
+		filters = append(filters, fmt.Sprintf("project_id=%d", detail.ProjectID))
 	}
-	data, code, err := s.Harbor.do(ctx, http.MethodGet, "/api/v2.0/audit-logs?"+q.Encode())
+	if op := strings.TrimSpace(strParam(params, "operation")); op != "" {
+		filters = append(filters, "operation="+op)
+	}
+	if len(filters) > 0 {
+		q.Set("q", strings.Join(filters, ","))
+	}
+	data, code, total, err := s.Harbor.doCounting(ctx, http.MethodGet, "/api/v2.0/audit-logs?"+q.Encode())
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +221,28 @@ func harborLogs(ctx context.Context, s *Session, params map[string]any) (any, er
 			"resource": l.Resource, "username": l.Username,
 		})
 	}
-	return map[string]any{"logs": out, "page": intParam(params, "page"), "pageSize": q.Get("page_size")}, nil
+	return map[string]any{
+		"logs": out,
+		"page": maxInt(intParam(params, "page"), 1),
+		// Harbor's own count, so the pager can offer real pages instead of
+		// guessing from row counts.
+		"total":    total,
+		"pageSize": clampInt(intParam(params, "pageSize"), 10, 100, 50),
+	}, nil
+}
+
+// pullFilter builds the query for the pull-operation audit entries.
+//
+// The operation has to travel inside `q`: Harbor's audit-log endpoint has no
+// top-level `operation` parameter and ignores the one it does not have, so
+// `?operation=pull` returns every entry — the pull counts were really "all
+// activity" counts, and the most-pulled ranking followed suit.
+func pullFilter(page int) string {
+	v := url.Values{}
+	v.Set("q", "operation=pull")
+	v.Set("page", strconv.Itoa(page))
+	v.Set("page_size", "100")
+	return "/api/v2.0/audit-logs?" + v.Encode()
 }
 
 func maxInt(a, b int) int {
@@ -363,7 +391,7 @@ func (h *HarborClient) topPulledProjects(ctx context.Context, days, n int) []map
 	const maxPages = 40
 	for page := 1; page <= maxPages; page++ {
 		data, code, err := h.do(ctx, http.MethodGet,
-			fmt.Sprintf("/api/v2.0/audit-logs?operation=pull&page=%d&page_size=100", page))
+			pullFilter(page))
 		if err != nil || code != http.StatusOK {
 			break
 		}
@@ -463,7 +491,7 @@ func (h *HarborClient) pullCounts(ctx context.Context, windowsDays []int) (map[s
 	const maxPages = 40 // 40 * 100 entries: a hard stop, never an unbounded walk
 	for page := 1; page <= maxPages; page++ {
 		data, code, err := h.do(ctx, http.MethodGet,
-			fmt.Sprintf("/api/v2.0/audit-logs?operation=pull&page=%d&page_size=100", page))
+			pullFilter(page))
 		if err != nil || code != http.StatusOK {
 			truncated = true // the history beyond here is unknown, so the counts are partial
 			break

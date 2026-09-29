@@ -45,6 +45,34 @@ func (h *HarborClient) do(ctx context.Context, method, path string) ([]byte, int
 	return data, resp.StatusCode, nil
 }
 
+// doCounting is `do` plus the X-Total-Count header, which Harbor sets on list
+// endpoints. Pagination needs it to know how many pages exist: without the
+// total, a full page and the last page look identical, and the UI can only
+// offer "next" blindly.
+func (h *HarborClient) doCounting(ctx context.Context, method, path string) ([]byte, int, int, error) {
+	req, err := http.NewRequestWithContext(ctx, method, h.base+path, nil)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	req.Header.Set("accept", "application/json")
+	if h.cred != nil && h.cred.Header() != "" {
+		req.Header.Set("authorization", h.cred.Header())
+	}
+	resp, err := h.http.Do(req)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	total := 0
+	if raw := resp.Header.Get("X-Total-Count"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			total = n
+		}
+	}
+	return data, resp.StatusCode, total, nil
+}
+
 type HarborProject struct {
 	ProjectID    int    `json:"project_id"`
 	Name         string `json:"name"`
