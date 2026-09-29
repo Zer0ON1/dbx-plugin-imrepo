@@ -4,7 +4,7 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
-## Unreleased
+## 0.1.4
 
 **The audit-log scope and operation filters did nothing.** Harbor's audit-log
 endpoint takes only `q`/`sort`/`page`/`page_size`: its swagger lists those four
