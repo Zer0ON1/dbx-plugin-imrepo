@@ -680,6 +680,18 @@ html, body {
 /* ---------- Audit logs ---------- */
 /* Registry GC section: label/control rows, matching the settings panel's frame. */
 .gc-box { display: flex; flex-direction: column; gap: 6px; }
+/* The schedule at a glance: four equal columns, labels above their values, so
+   type / cron / next run / last status read as one line. */
+.gc-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px 16px; margin: 4px 0 12px; }
+.gc-facts .k {
+  font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--im-fg-subtle); white-space: nowrap;
+}
+.gc-facts .v { font-size: 13px; font-weight: 600; color: var(--im-fg); min-width: 0; overflow-wrap: anywhere; }
+/* Status colour comes from the palette tokens the contrast gate validates
+   (--im-success / --im-danger on the panel background). */
+.gc-facts .v.gc-ok { color: var(--im-success); }
+.gc-facts .v.gc-bad { color: var(--im-danger); }
 .gc-form { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
 .gc-row { display: flex; align-items: center; gap: 10px; }
 .gc-row .k { font-size: 12px; color: var(--im-fg-muted); min-width: 92px; }

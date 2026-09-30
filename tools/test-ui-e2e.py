@@ -476,6 +476,22 @@ def main() -> int:
         check("it offers a schedule type and a concurrency control",
               "gc-row" in dom and "1-10" in dom, "controls missing")
         check("it offers a manual run", ("立即执行 GC" in dom or "Run GC now" in dom))
+        # The four schedule facts share one row: labels in a header row, values
+        # beneath, status coloured. Checked structurally — a screenshot shows the
+        # layout but cannot fail a build.
+        facts = re.search(r'class="gc-facts"(.*?)</div>', dom, re.S)
+        seg = facts.group(1) if facts else ""
+        labels = re.findall(r'class="k"[^>]*>([^<]*)<', seg)
+        check("the schedule facts are one labelled row of four",
+              # The DOM carries "Cron"; the uppercase look comes from CSS.
+              labels == ["计划类型", "Cron 表达式", "下次执行", "上次状态"], labels)
+        check("the status is coloured, not just written",
+              "gc-ok" in seg or "gc-bad" in seg, "no status colour class")
+        check("the status cell carries the value itself",
+              re.search(r'class="v mono[^"]*"[^>]*>Success<', seg) is not None, seg[-160:])
+        check("the parameters are not repeated above the form that edits them",
+              "同时回收无 Tag 的镜像: " not in seg)
+
         dom = browser.dom("theme=light&modal=settings&gcnone=1", 7000)
         check("an unconfigured registry says so instead of erroring",
               ("尚未配置" in dom or "No GC schedule" in dom), "no empty state")

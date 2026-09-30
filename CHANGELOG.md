@@ -4,6 +4,14 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
+## Unreleased
+
+**The GC schedule reads as one line.** Type, cron, next run and last status were
+scattered key/value pairs in an auto-fitting grid; they now sit in four equal
+columns with their labels above them, and the last status is coloured — green
+when the run succeeded, red when it did not. The two remaining parameters are no
+longer repeated above the form that edits them.
+
 ## 0.1.4
 
 **The audit-log scope and operation filters did nothing.** Harbor's audit-log

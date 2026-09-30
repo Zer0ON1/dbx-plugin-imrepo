@@ -32,25 +32,33 @@
     IM.state.gc = info;
 
     const configured = !!info.configured;
+    // Still needed: it seeds the form below from what is currently saved.
     const params = info.parameters || {};
 
     /* ---- what is scheduled right now ---- */
     if (configured) {
-      const facts = IM.el("div", "live-grid");
-      const addFact = (k, v) => {
-        facts.appendChild(IM.el("span", "k", k));
-        facts.appendChild(IM.el("span", "v", v || "—"));
-      };
-      addFact(IM.t("gc.type"), IM.t("gc.type." + info.type) || info.type);
-      addFact(IM.t("gc.cron"), info.cron);
-      addFact(IM.t("gc.nextRun"), IM.fmtTime(info.nextScheduledAt));
-      addFact(IM.t("gc.lastStatus"), info.lastStatus);
-      box.appendChild(facts);
-      if (params.delete_untagged !== undefined || params.workers !== undefined) {
-        box.appendChild(IM.el("p", "hint",
-          IM.t("gc.deleteUntagged") + ": " + (params.delete_untagged ? IM.t("yes") : IM.t("no"))
-          + "  ·  " + IM.t("gc.workers") + ": " + (params.workers ?? "—")));
+      // Four columns, labels over values: the schedule reads as one line rather
+      // than as scattered key/value pairs.
+      const facts = IM.el("div", "gc-facts");
+      [IM.t("gc.type"), IM.t("gc.cron"), IM.t("gc.nextRun"), IM.t("gc.lastStatus")]
+        .forEach((label) => facts.appendChild(IM.el("span", "k", label)));
+
+      const status = String(info.lastStatus || "").trim();
+      const statusCell = IM.el("span", "v mono", status || "—");
+      if (status) {
+        // Green when it worked, red when it did not; anything else (running,
+        // scheduled, never run) stays neutral rather than guessing a colour.
+        if (/success|succeed/i.test(status)) statusCell.classList.add("gc-ok");
+        else if (/error|fail|stopped|abort/i.test(status)) statusCell.classList.add("gc-bad");
       }
+
+      facts.appendChild(IM.el("span", "v", IM.t("gc.type." + info.type) || info.type));
+      facts.appendChild(IM.el("span", "v mono", info.cron || "—"));
+      facts.appendChild(IM.el("span", "v", info.nextScheduledAt ? IM.fmtTime(info.nextScheduledAt) : "—"));
+      facts.appendChild(statusCell);
+      box.appendChild(facts);
+      // The two remaining parameters are not repeated here: the form directly
+      // below shows them, and it is the thing being edited.
     } else {
       box.appendChild(IM.el("p", "hint", IM.t("gc.notConfigured")));
     }
