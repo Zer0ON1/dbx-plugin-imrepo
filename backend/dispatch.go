@@ -346,7 +346,29 @@ func registryDelete(ctx context.Context, s *Session, params map[string]any) (any
 	if err := guardTagNotProtected(s, strParam(params, "tag")); err != nil {
 		return nil, err
 	}
+	// The retention window applies here too. This path is the one the UI falls
+	// back to when a delete carries no artifact reference, and it deletes through
+	// the OCI API — so skipping the guard here would make the policy depend on
+	// which button produced the request rather than on what was asked for.
+	if repo := strParam(params, "repository"); repo != "" {
+		if project, short, ok := splitProjectRepo(repo); ok {
+			if err := s.guardRetentionWindow(ctx, project, short, strParam(params, "tag"), strParam(params, "digest")); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return map[string]any{"ok": true}, s.Oci.Delete(ctx, strParam(params, "repository"), strParam(params, "digest"))
+}
+
+// splitProjectRepo splits "project/repository" into its parts. A name without a
+// slash has no project to resolve, and the checks that need one are skipped — the
+// same shape the retag path already relies on.
+func splitProjectRepo(full string) (string, string, bool) {
+	parts := strings.SplitN(strings.Trim(full, "/"), "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
 }
 
 // ---------------------------------------------------------------------------

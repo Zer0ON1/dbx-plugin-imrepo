@@ -366,6 +366,12 @@ def main() -> int:
               "tag-chip mono protected" in dom, "no protected chip")
         check("...and its delete action is visibly blocked",
               'icon-btn danger blocked' in dom, "the delete action is not marked")
+        # The window is enforced in the backend, so the view has to show it too:
+        # an artifact inside the window looked identical to one outside it, and
+        # the click came back as a refusal — which reads as the plugin breaking
+        # rather than as the policy working.
+        check("an artifact inside the retention window says so before you click",
+              "在保留窗口内" in dom, "the in-window artifact is not marked")
 
         dom = browser.dom("theme=light&modal=cleanup&rules=1", 5000)
         check("the cleanup dialog names the rules that produced the list",

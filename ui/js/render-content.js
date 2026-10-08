@@ -304,22 +304,51 @@
     return open.length ? open[0] : fallback;
   }
 
-  IM.deleteTagBtn = function deleteTagBtn(repo, tag, reference) {
+  IM.deleteTagBtn = function deleteTagBtn(repo, tag, reference, blockedReason) {
     const pat = IM.protectedPattern(tag);
-    const b = IM.iconBtn(
-      pat ? IM.t("protected.refused") : IM.t("delete"),
-      "close",
+    // Two ways a delete is refused: the tag globs, and the retention window. The
+    // window is decided by the caller, which is the only place that holds the
+    // repository listing. Both are shown the same way — a blocked button that
+    // says why — because a button that looks live and then fails teaches the
+    // operator nothing.
+    const reason = pat ? IM.t("protected.refused") + "  [" + pat + "]" : blockedReason;
+    // The reason is the button's title, not a generic "blocked" label: iconBtn's
+    // first argument becomes the tooltip and the aria-label, so a caller with
+    // something specific to say has to say it there. Putting only the generic
+    // text on the button left the actual reason in a toast, after the click.
+    const b = IM.iconBtn(reason || IM.t("delete"), "close",
       () => {
-        if (pat) { IM.toast(IM.t("protected.refused") + "  [" + pat + "]", "err"); return; }
+        if (reason) { IM.toast(reason, "err"); return; }
         IM.openDelete(repo, tag, reference);
       },
-      "danger" + (pat ? " blocked" : ""),
+      "danger" + (reason ? " blocked" : ""),
     );
-    if (pat) {
+    if (reason) {
       b.classList.add("blocked");
       b.setAttribute("aria-disabled", "true");
     }
     return b;
+  }
+
+  /**
+   * The artifacts the retention window keeps, keyed by digest.
+   *
+   * The backend refuses to delete these, so the view marks them the same way it
+   * marks a protected tag. Before this, an artifact inside the window looked
+   * exactly like one outside it: the click went through the dialog and came back
+   * as a refusal, which reads as the plugin being broken rather than as the
+   * policy working.
+   */
+  IM.inRetentionWindow = function inRetentionWindow(arts) {
+    const keep = IM.settingsOf().retention.keepTagged;
+    const set = new Set();
+    if (!keep) return set;
+    (arts || [])
+      .filter((a) => (a.tags || []).length)
+      .slice()
+      .sort((a, b) => (Date.parse(b.push_time) || 0) - (Date.parse(a.push_time) || 0))
+      .forEach((a, i) => { if (i < keep) set.add(a.digest); });
+    return set;
   }
 
   /**
@@ -392,6 +421,9 @@
     if (!arts.length) { body.appendChild(IM.el("div", "empty-state", IM.el("p", "", IM.t("noData")))); return; }
 
     const outside = IM.outOfPolicy(arts);
+    const inWindow = IM.inRetentionWindow(arts);
+    const keepN = IM.settingsOf().retention.keepTagged;
+    const windowReason = IM.t("retention.kept") + ": " + IM.t("settings.keepTagged") + " = " + keepN;
 
     const table = IM.el("table", "table");
     const thead = IM.el("thead");
@@ -450,7 +482,10 @@
       const tdVuln = IM.el("td");
       tdVuln.appendChild(IM.iconBtn(IM.t("vuln"), "shield", () => IM.openVuln(project + "/" + repo, ref0, a.digest)));
       const tdDel = IM.el("td");
-      if (names.length) tdDel.appendChild(IM.deleteTagBtn(project + "/" + repo, IM.deletableTag(names, names[0]), a.digest));
+      if (names.length) {
+        tdDel.appendChild(IM.deleteTagBtn(project + "/" + repo, IM.deletableTag(names, names[0]), a.digest,
+          inWindow.has(a.digest) ? windowReason : ""));
+      }
       tr.append(tdTag, tdDigest, tdSize, tdPush, tdPull, tdRetag, tdLayers, tdVuln, tdDel);
       tbody.appendChild(tr);
     }

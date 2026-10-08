@@ -6,6 +6,32 @@ Notable changes per release. Versions follow the plugin id
 
 ## Unreleased
 
+**The AI path skipped the registry-type detection.** Reported from use: with the
+policy set to keep 5, deleting the 4th-newest through the assistant succeeded on
+a build that already enforced the window.
+
+The workbench upgrades a connection declared as docker-v2 when the server answers
+Harbor's ping; the tool path built its session without that step. So on a
+connection carrying the docker-v2 label, every guard asking "is this Harbor?"
+answered no — the retention window returned early — while the Harbor client kept
+working, and the delete went through. `mcpSession` now runs the same detection
+`connection/connect` does, which also fixes project creation, the scanner and
+repository listing for such a connection.
+
+Found by reproducing the report as a test: with the detection removed, the tool
+answers `"ok": true` and the tag is gone.
+
+**`registry/delete` had no retention-window check.** Only the tag globs were
+enforced there. It is the path the workbench falls back to when a delete carries
+no artifact reference, so the policy depended on which button produced the
+request rather than on what was asked for.
+
+**The window is now visible in the view, not only in the refusal.** An artifact
+inside the window looked identical to one outside it; the click went through the
+confirmation and came back refused, which reads as the plugin breaking rather
+than as the policy working. Its delete button is now blocked with the reason,
+the same way a policy-protected tag already was.
+
 **The retention window is enforced, not just drawn.** "Keep the newest N
 artifacts" marked the artifacts outside the window and stopped there — the newest
 N could be deleted freely, which is the opposite of what the setting says.

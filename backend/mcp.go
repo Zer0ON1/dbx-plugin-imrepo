@@ -206,6 +206,13 @@ func mcpSession(ctx context.Context, params map[string]any) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The same upgrade connection/connect performs. Without it a connection
+	// configured as docker-v2 against a server that is really Harbor keeps that
+	// label here — and the guards that ask "is this Harbor?" (the retention
+	// window, the scanner, project creation) all answer no, while the Harbor
+	// client works regardless. A delete that should have been refused then goes
+	// through.
+	detectHarbor(ctx, s)
 	storeSession(s)
 	return s, nil
 }

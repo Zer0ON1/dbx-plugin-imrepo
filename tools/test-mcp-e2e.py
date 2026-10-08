@@ -208,17 +208,22 @@ class Sidecar:
             raise AssertionError(f"{method} failed: {reply['error']}")
         return reply.get("result") or {}
 
-    def lifecycle(self) -> dict:
+    def lifecycle(self, registry_type: str = "harbor") -> dict:
         """The payload the host attaches to a tool call — same as connect."""
         return {
             "connection": {
                 "id": CONN, "name": "IMREPO", "host": "127.0.0.1", "port": PORT,
                 "username": "admin",
-                "config": {"registry_type": "harbor", "auth_type": "basic", "insecure": True},
+                "config": {"registry_type": registry_type, "auth_type": "basic", "insecure": True},
                 "secret": {"password": "fixture-pass"},
             },
             "runtime": {"host": "127.0.0.1", "port": PORT},
         }
+
+    def tool_as(self, registry_type: str, name: str, **args) -> dict:
+        """Call a tool through a session that declares another registry type."""
+        return self.result("mcp/call", {"tool": name, "arguments": args,
+                                        "lifecycle": self.lifecycle(registry_type)})
 
     def tool(self, name: str, **args) -> dict:
         """Call one tool; returns the CallToolResult body."""
@@ -346,6 +351,31 @@ def main() -> int:
         check("...naming the window as the reason",
               "most recent" in sc.text("delete_tag", project=PROJECT, repository="ledger-api", tag="v1"),
               sc.text("delete_tag", project=PROJECT, repository="ledger-api", tag="v1"))
+        sc.result("settings/set", {"connectionId": CONN, "settings": {
+            "cleanup": {"keepUntagged": 0, "minAgeDays": 0, "excludeRepos": [], "maxReposPerScan": 100},
+            "retention": {"keepTagged": 0, "protectTags": ["latest"]},
+            "scanner": {"source": "harbor", "threshold": "high", "cacheSeconds": 300},
+        }})
+
+        # A connection configured as docker-v2 against a server that is really
+        # Harbor. The workbench upgrades it on connect; the tool path used to skip
+        # that upgrade, so every guard asking "is this Harbor?" answered no while
+        # the Harbor client worked — a delete that should have been refused went
+        # through. That is the shape of the report this covers.
+        sc.result("settings/set", {"connectionId": CONN, "settings": {
+            "cleanup": {"keepUntagged": 0, "minAgeDays": 0, "excludeRepos": [], "maxReposPerScan": 100},
+            "retention": {"keepTagged": 5, "protectTags": []},
+            "scanner": {"source": "harbor", "threshold": "high", "cacheSeconds": 300},
+        }})
+        DELETES.clear()
+        mislabelled = sc.tool_as("docker-v2", "delete_tag", project=PROJECT, repository="ledger-api", tag="v1")
+        check("a docker-v2 label does not disable the window for a Harbor server",
+              mislabelled.get("isError") is True, mislabelled)
+        check("...and no DELETE goes out", not DELETES, DELETES)
+        check("...and the session is treated as Harbor, not v2",
+              json.loads(sc.text("list_repositories", project=PROJECT))["repositories"][0]["repository"] == "ledger-api",
+              "list_repositories answered like a v2 registry")
+
         sc.result("settings/set", {"connectionId": CONN, "settings": {
             "cleanup": {"keepUntagged": 0, "minAgeDays": 0, "excludeRepos": [], "maxReposPerScan": 100},
             "retention": {"keepTagged": 0, "protectTags": ["latest"]},
