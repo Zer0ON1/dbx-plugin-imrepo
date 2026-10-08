@@ -72,6 +72,13 @@ var plainMethods = map[string]plainHandler{
 	"settings/getProject": settingsGetProject,
 	"settings/setProject": settingsSetProject,
 
+	// MCP tools for DBX's assistant. Deliberately plain handlers rather than
+	// session handlers: the connection travels in `lifecycle` inside the request
+	// body, the same payload connection/connect gets, so there is no session to
+	// resolve from an id — mcpSession builds it from that payload.
+	"mcp/tools": handleMCPTools,
+	"mcp/call":  handleMCPCall,
+
 	// connection lifecycle (normally driven by the host)
 	"connection/test":       func(ctx context.Context, p map[string]any) (any, error) { return handleConnect(ctx, p, true) },
 	"connection/connect":    func(ctx context.Context, p map[string]any) (any, error) { return handleConnect(ctx, p, false) },

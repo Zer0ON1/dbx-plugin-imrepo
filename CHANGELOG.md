@@ -6,6 +6,22 @@ Notable changes per release. Versions follow the plugin id
 
 ## Unreleased
 
+**AI assistant tools.** The plugin now exposes nine MCP tools to DBX's built-in
+assistant, behind the opt-in switch in the plugin centre. Five read (projects,
+repositories, tags, one image, vulnerability report) and four write (create
+project, project visibility, rename tag, delete tag).
+
+The design decision worth recording is that every tool drives the *same* backend
+function the workbench calls. A second implementation would have quietly bypassed
+the retention policy and the delete re-check — and the docs are explicit that the
+host's confirmation prompt guards against a model acting by mistake, and "cannot
+replace the plugin's own safety rules". So a protected tag still cannot be deleted
+through this path, and the test asserts on the requests: no DELETE is sent at all.
+
+Reads carry `readOnlyHint` and run directly; writes always pause for the operator.
+`external_tools` stays false, so nothing is published to external MCP clients.
+
+
 **The GC schedule reads as one line.** Type, cron, next run and last status were
 scattered key/value pairs in an auto-fitting grid; they now sit in four equal
 columns with their labels above them, and the last status is coloured — green
@@ -102,23 +118,6 @@ had discarded it.
 本版本发布时，插件已在三台**实体机**上安装使用过：**麒麟 V10 aarch64、openEuler 24.03 amd64、
 Windows 11 Enterprise**（此前 0.1.2 的 Release Notes 只提到了麒麟 V10 上的 arm64 复验）。
 Release Notes 里可以如实写这一条——它比"CI 跑过"更有说服力，因为那是真实发行版上的实际使用。
-
-### 发版时必须写进 Release Notes 的风险提示
-
-> **连接凭据会以 base64 形式缓存在 `<UserConfigDir>/imrepo-dbx-plugin/credentials.json`**
-> （Windows 为 `%AppData%\imrepo-dbx-plugin\`，macOS 为 `~/Library/Application Support/`，
-> Linux 为 `~/.config/`）。文件权限 `0600`，但 **base64 是编码而非加密**——能读取该文件的
-> 本地进程或用户即可还原出密码。这与 `~/.docker/config.json` 的威胁模型相同。
->
-> 之所以要缓存：宿主在重连时可能不下发连接密钥，没有这份缓存，成员管理、清理、
-> 漏洞报告等需要认证的操作会全部失败。不需要时可删除该文件；插件会在下一次需要时重新写入。
->
-> 更好的做法是为此类连接使用**权限最小化的账号**（Harbor robot account / 只读令牌）。
-
-这段必须出现在**下一个版本的 Release Notes 里**（注意：GitHub Release 不是 Changelog，
-两者都要写，或至少 Release 要有）。写它的理由是：0.1.2 已上架商店，用户装到的是含此行为的
-版本，而当时的 Release Notes 未提及——这是一项应当主动披露的本地存储设计。
-
 ## 0.1.2
 
 Everything here came from using the plugin against a real Harbor rather than the

@@ -314,6 +314,13 @@
       "id": "com.leavingrain.imrepo.main",
       "label": "IMREPO",
       "icon": "assets/plugin.svg"
+    },
+    {
+      "type": "mcp",
+      "id": "com.leavingrain.imrepo.ai",
+      "description": "Ask the registry: list projects, repositories, tags and image details, read vulnerability reports, and (with confirmation) create projects, change visibility, rename or delete tags.",
+      "ai_tools": true,
+      "external_tools": false
     }
   ],
   "localizations": {
