@@ -41,6 +41,14 @@ func retag(ctx context.Context, s *Session, params map[string]any) (any, error) 
 	}
 
 	if boolParam(params, "deleteSource") {
+		// Checked before anything is written, for the same reason the tag
+		// protection is: refusing afterwards would leave a half-finished rename.
+		parts := strings.SplitN(repo, "/", 2)
+		if len(parts) == 2 {
+			if err := s.guardRetentionWindow(ctx, parts[0], parts[1], source, ""); err != nil {
+				return nil, err
+			}
+		}
 		// Checked before anything is written: refusing after the new tag exists
 		// would leave a half-finished rename behind.
 		if pat, blocked := s.tagProtected(source); blocked {

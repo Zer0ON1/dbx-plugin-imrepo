@@ -604,6 +604,9 @@ html, body {
 .live-cell .k { color: var(--im-fg-muted); white-space: nowrap; }
 .live-cell .v { color: var(--im-fg); font-weight: 600; text-align: right; min-width: 0; word-break: break-word; }
 .set-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+/* GC: saving a schedule and starting a run are different enough to keep apart. */
+.gc-actions { justify-content: space-between; align-items: center; border-top: 1px solid var(--im-border); padding-top: 12px; margin-top: 14px; }
+.gc-actions-save, .gc-actions-run { display: flex; }
 .set-select-sm { min-width: 140px; height: 30px; font-size: 12.5px; }
 .set-input-cron { width: 180px; font-family: var(--im-mono); font-size: 12px; }
 .member-add { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }

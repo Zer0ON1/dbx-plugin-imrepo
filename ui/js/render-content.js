@@ -52,7 +52,9 @@
       body.appendChild(IM.el("p", "hint warn", IM.t("imagesErrors") + " (" + data.repositoryErrors.length + ")"));
     }
 
-    if (!images.length) {
+    // The table lists repositories, so emptiness is about repositories — a
+    // project of empty repositories is still a project worth showing.
+    if (!(data.repositories || []).length) {
       body.appendChild(IM.el("div", "empty-state", IM.el("p", "", IM.t("noData"))));
       return;
     }
@@ -60,44 +62,46 @@
     const table = IM.el("table", "table");
     const thead = IM.el("thead");
     const hr = IM.el("tr");
-    [IM.t("repo"), IM.t("digest"), IM.t("size"), IM.t("pushed"), IM.t("imagesTags"), IM.t("imagesActions")].forEach((h) => hr.appendChild(IM.el("th", "", h)));
+    [IM.t("repo"), IM.t("imagesCount"), IM.t("imagesTags"), IM.t("size"), IM.t("pushed"), IM.t("imagesActions")].forEach((h) => hr.appendChild(IM.el("th", "", h)));
     thead.appendChild(hr);
     table.appendChild(thead);
     const tbody = IM.el("tbody");
-    for (const im of images) {
-      const ref = (im.tags && im.tags[0]) || im.digest;
+    // One row per repository. The overview is an index of what the project
+    // holds; the per-image detail lives in the repository's own tag view, one
+    // click away through the name.
+    for (const rp of (data.repositories || [])) {
       const tr = IM.el("tr");
-      // The repository name is a way in: clicking it opens that repository's
-      // own listing with the full tag view.
       const tdRepo = IM.el("td");
-      const link = IM.el("a", "repo-link", im.repository);
+      const link = IM.el("a", "repo-link", rp.repository);
       link.href = "#";
       link.title = IM.t("imagesOpenRepo");
       link.addEventListener("click", (e) => {
         e.preventDefault();
-        IM.selectRepo({ name: project }, { name: im.repository, full_name: project + "/" + im.repository });
+        IM.selectRepo({ name: project }, { name: rp.repository, full_name: project + "/" + rp.repository });
       });
       tdRepo.appendChild(link);
       tr.appendChild(tdRepo);
-      const tdDigest = IM.el("td");
-      const dg = IM.el("span", "mono digest-cell", IM.shortDigest(im.digest));
-      dg.title = im.digest || "";
-      tdDigest.appendChild(dg);
-      if (im.type && im.type !== "IMAGE") tdDigest.appendChild(IM.el("span", "badge soft", im.type));
-      tdDigest.appendChild(IM.archBadges(im.arches));
-      tr.appendChild(tdDigest);
-      tr.appendChild(IM.el("td", "", IM.fmtSize(im.size)));
-      tr.appendChild(IM.el("td", "", IM.fmtTime(im.push_time)));
-      tr.appendChild(IM.el("td", "num", String(im.tagCount || 0)));
+      tr.appendChild(IM.el("td", "num", String(rp.imageCount || 0)));
+      tr.appendChild(IM.el("td", "num", String(rp.tagCount || 0)));
+      tr.appendChild(IM.el("td", "", IM.fmtSize(rp.totalSize || 0)));
+      const tdPush = IM.el("td", "", IM.fmtTime(rp.pushedAt));
+      if (rp.arches && rp.arches.length) tdPush.appendChild(IM.archBadges(rp.arches));
+      tr.appendChild(tdPush);
+
       const tdActs = IM.el("td");
       const acts = IM.el("div", "actions");
-      // Rename replaces pull/layers here: an overview row answers "what is
-      // here and how old", not "how do I run this image" — the repository
-      // view has the full action set.
-      if ((im.tags || []).length) {
-        acts.appendChild(IM.iconBtn(IM.t("retag"), "tag", () => IM.openRetag(project + "/" + im.repository, im.tags, im.tags[0])));
+      // Pulling needs a tag: a pull command is `repo:tag`, and a digest would
+      // render as `repo:sha256:...`, which is not a command anyone can run. A
+      // repository whose images are all untagged therefore offers no pull.
+      if (rp.latestTag) {
+        acts.appendChild(IM.iconBtn(IM.t("pull"), "pull", () => IM.openPull(project + "/" + rp.repository, rp.latestTag)));
+        acts.appendChild(IM.iconBtn(IM.t("vuln"), "shield",
+          () => IM.openVuln(project + "/" + rp.repository, rp.latestTag, rp.latestDigest)));
+      } else {
+        const none = IM.iconBtn(IM.t("pull"), "pull", () => IM.toast(IM.t("imagesNoTagToPull"), "warn"), "blocked");
+        none.classList.add("blocked");
+        acts.appendChild(none);
       }
-      acts.appendChild(IM.iconBtn(IM.t("vuln"), "shield", () => IM.openVuln(project + "/" + im.repository, ref, im.digest)));
       tdActs.appendChild(acts);
       tr.appendChild(tdActs);
       tbody.appendChild(tr);

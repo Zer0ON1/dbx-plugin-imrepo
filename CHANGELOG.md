@@ -6,6 +6,32 @@ Notable changes per release. Versions follow the plugin id
 
 ## Unreleased
 
+**The retention window is enforced, not just drawn.** "Keep the newest N
+artifacts" marked the artifacts outside the window and stopped there — the newest
+N could be deleted freely, which is the opposite of what the setting says.
+Reported from use: deleting the 4th-newest succeeded under a policy of 5. The
+window is now checked on every delete and rename-with-source-removal, and the
+check lives inside the shared delete function rather than in the RPC handler —
+it briefly lived in the handler only, which left the AI tool path protected by
+the tag globs but not by the window.
+
+**The project overview lists repositories, not artifacts.** It rendered one row
+per digest: on a real project, 58 rows for 13 repositories, the same name
+repeated and a tag count that belonged to a single artifact (so it read 1 or 0
+almost everywhere). A repository is the unit people work in here; each row now
+shows its image count, tag count, total size and last push, and offers the pull
+command for its newest tag.
+
+**The GC panel's two buttons are kept apart.** One writes a schedule, the other
+starts a real GC run over the whole registry; side by side they were a mis-click
+apart.
+
+**The preview no longer hard-codes the plugin version.** It had reported 0.1.0
+for several releases while the plugin was at 0.1.4 — the About panel was right
+and its input was stale. tools/make-preview.py now injects the manifest's
+version, and the UI test compares against it rather than matching the shape of a
+version string.
+
 **AI assistant tools.** The plugin now exposes nine MCP tools to DBX's built-in
 assistant, behind the opt-in switch in the plugin centre. Five read (projects,
 repositories, tags, one image, vulnerability report) and four write (create

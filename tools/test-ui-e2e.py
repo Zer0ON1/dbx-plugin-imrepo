@@ -39,7 +39,9 @@ ROOT = _harness.ROOT
 PREVIEW = ROOT / ".preview" / "preview.html"
 # Read from the manifest rather than restating it: a plugin-id rename should not
 # have to be chased into the tests.
-PLUGIN_ID = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))["id"]
+_MANIFEST = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
+PLUGIN_ID = _MANIFEST["id"]
+PLUGIN_VERSION = _MANIFEST["version"]
 
 # Wall-clock ceiling for one browser run. It only has to be reached when the
 # browser is broken; a healthy run finishes in a few seconds.
@@ -250,8 +252,12 @@ def main() -> int:
               "a section is present or absent unexpectedly")
         # Match the version by shape (x.y.z), never by a literal prefix — a
         # hardcoded "1.2." broke the moment the plugin moved to 1.3.0.
-        check("About shows the plugin version and id",
-              bool(re.search(r"\b\d+\.\d+\.\d+\b", dom)) and PLUGIN_ID in dom)
+        # Compared against the manifest, not matched by shape: a version that
+        # only looks like a version is how the About panel reported 0.1.0 for
+        # four releases while the plugin was at 0.1.4.
+        check("About shows the manifest's version and id",
+              PLUGIN_VERSION in dom and PLUGIN_ID in dom,
+              f"expected version {PLUGIN_VERSION!r} in the panel")
         # The backend always reports the project page now, so the placeholder is
         # only reachable for a fork that has not set one (?nogithub=1).
         check("About links to the project page",
@@ -383,16 +389,28 @@ def main() -> int:
               all(k in dom for k in ("镜像数", "总大小", "仓库数", "Tag 数")), "a stat card is missing")
         check("the totals come from the aggregated payload",
               '>10</span>' in dom and "3.6 GB" in dom, "totals do not match the mock data")
-        check("the table is image-first: no tag column", "<th>Tag</th>" not in dom,
-              "a tag column leaked into the overview")
-        check("a chart-typed image is labelled", "CHART" in dom, "non-IMAGE type badge missing")
-        check("rows offer rename + vuln instead of pull/layers",
-              'aria-label="重命名 Tag"' in dom and 'aria-label="漏洞"' in dom
-              and 'aria-label="拉取命令"' not in dom and 'aria-label="镜像层"' not in dom)
-        check("a tag-count column is shown", "<th>Tag 数</th>" in dom, "no tag-count column")
+        # The overview lists REPOSITORIES, not artifacts. It used to render one
+        # row per digest: on a real project that was 58 rows for 13 repositories,
+        # the same name repeated, and a tag count that was the single artifact's
+        # (so it read 1 or 0 almost everywhere). These assertions are about the
+        # unit, which is the thing that was wrong.
+        body = re.search(r'id="contentBody">(.*?)</main>', dom, re.S)
+        seg = body.group(1) if body else ""
+        rows = re.findall(r"<tr>(.*?)</tr>", seg, re.S)
+        check("the overview has a header row plus one row per repository",
+              len(rows) == 1 + 7, f"{len(rows) - 1} row(s) after the header")
+        names = [re.search(r'repo-link"[^>]*>([^<]+)<', r) for r in rows[1:]]
+        names = [m.group(1) for m in names if m]
+        check("no repository is listed twice", len(names) == len(set(names)), names)
+        check("the tag count is the repository's total, not one artifact's",
+              bool(re.search(r'repo-link"[^>]*>ledger-api.*?<td class="num">3</td><td class="num">4</td>',
+                             seg, re.S)),
+              "ledger-api should show 3 images and 4 tags")
+        check("rows offer a pull command", 'aria-label="拉取命令"' in seg, "no pull action")
+        check("...and a vulnerability lookup", 'aria-label="漏洞"' in seg, "no vuln action")
         check("architectures render as one badge per arch",
-              "arch-badge" in dom and "amd64" in dom and "arm64" in dom, "arch badges missing")
-        check("the repository name is a way into the repository view", "repo-link" in dom,
+              "arch-badge" in seg and "amd64" in seg, "arch badges missing")
+        check("the repository name is a way into the repository view", "repo-link" in seg,
               "no clickable repository link")
 
         print("\nJ) a v2 tag table lazily shows each tag's architectures")

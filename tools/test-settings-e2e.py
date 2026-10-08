@@ -589,6 +589,61 @@ def main() -> int:
                                         "sourceTag": "latest", "targetTag": "v9", "deleteSource": False})
         check("adding a tag is still allowed (nothing is lost)", "error" not in r2, r2)
 
+        print("\nF2) the retention window blocks deletes, not just marks them")
+        # "Keep the newest N artifacts" used to be a UI marker: the newest N were
+        # labelled and nothing stopped you deleting one. Reported from use — a
+        # delete of the 4th-newest succeeded while the policy said keep 5. It is
+        # enforced now, and the enforcement lives in the backend so the AI tools
+        # inherit it rather than being a way around it.
+        sc.result("settings/set", {"connectionId": CONN, "settings": settings_payload(
+            retention={"keepTagged": 2, "protectTags": []})})
+
+        DELETES.clear()
+        reply = sc.call("harbor/deleteArtifact", {"connectionId": CONN, "project": PROJECT,
+                                                  "repository": "app-ms", "reference": NEW})
+        check("the newest artifact is refused", "error" in reply
+              and "most recent" in reply["error"]["message"], reply)
+        check("...and no DELETE is sent", DELETES == [], DELETES)
+
+        reply = sc.call("harbor/deleteArtifact", {"connectionId": CONN, "project": PROJECT,
+                                                  "repository": "app-ms", "reference": MID})
+        check("the second-newest is refused too (the window is 2)", "error" in reply, reply)
+        check("...still nothing sent", DELETES == [], DELETES)
+
+        reply = sc.call("harbor/deleteArtifact", {"connectionId": CONN, "project": PROJECT,
+                                                  "repository": "app-ms", "reference": OLD})
+        check("an artifact outside the window deletes normally", "error" not in reply, reply)
+        check("...with the DELETE going out", len(DELETES) == 1 and OLD in DELETES[0], DELETES)
+
+        # The window is judged per repository. legacy-svc holds a single image, so
+        # a window of 2 protects it entirely — which is the rule being applied to
+        # that repository's own images rather than to app-ms's.
+        DELETES.clear()
+        reply = sc.call("harbor/deleteArtifact", {"connectionId": CONN, "project": PROJECT,
+                                                  "repository": "legacy-svc", "reference": LEGACY})
+        check("a repository with fewer images than the window protects them all",
+              "error" in reply and "legacy-svc" in reply["error"]["message"], reply)
+        check("...and nothing was sent for that one either", DELETES == [], DELETES)
+
+        # A rename that drops the source tag must respect the window as well.
+        sc.result("settings/set", {"connectionId": CONN, "settings": settings_payload(
+            retention={"keepTagged": 5, "protectTags": []})})
+        PUTS.clear(); DELETES.clear()
+        reply = sc.call("registry/retag", {"connectionId": CONN, "repository": PROJECT + "/tagged",
+                                           "sourceTag": "release-1.2", "targetTag": "v9", "deleteSource": True})
+        check("a rename cannot drop a tag inside the window", "error" in reply, reply)
+        check("...and nothing was written first", PUTS == [], PUTS)
+
+        # Turning the window off restores the old behaviour, which is how a
+        # connection that never set it is unaffected.
+        sc.result("settings/set", {"connectionId": CONN, "settings": settings_payload(
+            retention={"keepTagged": 0, "protectTags": []})})
+        DELETES.clear()
+        reply = sc.call("harbor/deleteArtifact", {"connectionId": CONN, "project": PROJECT,
+                                                  "repository": "app-ms", "reference": NEW})
+        check("with the window off the same delete goes through", "error" not in reply, reply)
+        check("...DELETE sent", len(DELETES) == 1, DELETES)
+
         print("\nG) the scanner threshold, its cache, and the off switch")
         sc.result("settings/set", {"connectionId": CONN, "settings": settings_payload(
             scanner={"source": "harbor", "threshold": "critical", "cacheSeconds": 300})})

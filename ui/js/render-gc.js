@@ -121,7 +121,7 @@
     const status = IM.el("p", "hint");
     box.appendChild(status);
 
-    const actions = IM.el("div", "set-actions");
+    const actions = IM.el("div", "set-actions gc-actions");
     const save = IM.el("button", "btn btn-primary btn-sm", IM.t("gc.save"));
     save.addEventListener("click", async () => {
       const workers = Number(wkInput.value);
@@ -185,7 +185,15 @@
       }
     });
 
-    actions.append(save, run);
+    // Kept apart on purpose: one writes a schedule, the other starts a real GC
+    // run over the whole registry. Side by side they are a mis-click away from
+    // each other, so the safe action sits far left and the destructive one far
+    // right — the separation is the point, not the styling.
+    const saveSide = IM.el("div", "gc-actions-save");
+    saveSide.appendChild(save);
+    const runSide = IM.el("div", "gc-actions-run");
+    runSide.appendChild(run);
+    actions.append(saveSide, runSide);
     box.appendChild(actions);
   }
 })(window.IMREPO = window.IMREPO || {});

@@ -26,6 +26,7 @@ Run:  python tools/make-preview.py
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import sys
@@ -63,6 +64,14 @@ def main() -> int:
 
     html = INDEX.read_text(encoding="utf-8")
     mock = MOCK.read_text(encoding="utf-8")
+
+    # Hand the mock the manifest's version before it runs. The preview had a
+    # hard-coded copy, so the About panel kept reporting 0.1.0 for several
+    # releases — the same "a copy drifts" failure the arch badges had, where the
+    # mock and the real code were wrong together and no test could see it.
+    manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
+    mock = ("window.__IMREPO_MANIFEST__ = " + json.dumps(
+        {"version": manifest.get("version", ""), "id": manifest.get("id", "")}) + ";\n") + mock
 
     at = injection_point(html)
     if at < 0:

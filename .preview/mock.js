@@ -154,6 +154,31 @@
   PROJECT_IMAGES.tagCount = PROJECT_IMAGES.images.reduce((n, i) => n + i.tagCount, 0);
   PROJECT_IMAGES.totalSize = PROJECT_IMAGES.images.reduce((n, i) => n + i.size, 0);
 
+  /* The overview lists repositories, not artifacts, and this derives them from
+     the same rows the backend would — grouping rather than a second hand-written
+     fixture, so the two cannot drift apart the way the arch badges once did. */
+  PROJECT_IMAGES.repositories = (() => {
+    const byName = new Map();
+    for (const im of PROJECT_IMAGES.images) {
+      let r = byName.get(im.repository);
+      if (!r) {
+        r = { repository: im.repository, imageCount: 0, tagCount: 0, totalSize: 0,
+              pushedAt: "", arches: [], latestTag: "", latestDigest: "" };
+        byName.set(im.repository, r);
+      }
+      r.imageCount += 1;
+      r.tagCount += (im.tags || []).length;
+      r.totalSize += im.size || 0;
+      if ((im.push_time || "") > r.pushedAt) r.pushedAt = im.push_time || "";
+      if (!r.latestTag && (im.tags || []).length) {
+        r.latestTag = im.tags[0];
+        r.latestDigest = im.digest;
+      }
+      for (const a of (im.arches || [])) if (!r.arches.includes(a)) r.arches.push(a);
+    }
+    return [...byName.values()].sort((a, b) => (a.pushedAt < b.pushedAt ? 1 : -1));
+  })();
+
   const VULNS = {
     severity: "High",
     vulnerabilities: [
@@ -227,7 +252,8 @@
       generatedAt: "2026-09-23T09:12:04Z",
     },
     "app/info": {
-      pluginId: "com.leavingrain.imrepo", version: "0.1.0", protocolVersion: 1,
+      pluginId: (window.__IMREPO_MANIFEST__ || {}).id || "com.leavingrain.imrepo",
+      version: (window.__IMREPO_MANIFEST__ || {}).version || "0.0.0", protocolVersion: 1,
       transport: "stdio-jsonl",
       // Mirrors the backend, which now always reports the project page. A fork
       // that has not set one sends "" — the About panel renders a placeholder

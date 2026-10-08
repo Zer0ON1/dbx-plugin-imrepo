@@ -329,6 +329,29 @@ def main() -> int:
         check("a rename cannot move a protected tag out of the way either",
               not [d for d in DELETES if d.endswith("/latest")], DELETES)
 
+        # The retention window lives in the shared delete function, not in the
+        # RPC handler. It briefly lived in the handler only, which meant the AI
+        # path had the glob protection but not the window — a guard beside one
+        # caller that the next caller never gets. This asserts the sharing.
+        sc.result("settings/set", {"connectionId": CONN, "settings": {
+            "cleanup": {"keepUntagged": 0, "minAgeDays": 0, "excludeRepos": [], "maxReposPerScan": 100},
+            "retention": {"keepTagged": 5, "protectTags": []},
+            "scanner": {"source": "harbor", "threshold": "high", "cacheSeconds": 300},
+        }})
+        DELETES.clear()
+        windowed = sc.tool("delete_tag", project=PROJECT, repository="ledger-api", tag="v1")
+        check("the retention window applies to the AI path too",
+              windowed.get("isError") is True, windowed)
+        check("...and that path sends no DELETE either", not DELETES, DELETES)
+        check("...naming the window as the reason",
+              "most recent" in sc.text("delete_tag", project=PROJECT, repository="ledger-api", tag="v1"),
+              sc.text("delete_tag", project=PROJECT, repository="ledger-api", tag="v1"))
+        sc.result("settings/set", {"connectionId": CONN, "settings": {
+            "cleanup": {"keepUntagged": 0, "minAgeDays": 0, "excludeRepos": [], "maxReposPerScan": 100},
+            "retention": {"keepTagged": 0, "protectTags": ["latest"]},
+            "scanner": {"source": "harbor", "threshold": "high", "cacheSeconds": 300},
+        }})
+
         DELETES.clear()
         gone = as_json("delete_tag", project=PROJECT, repository="ledger-api", tag="v1")
         check("an unprotected tag deletes normally", gone.get("ok") is True, gone)

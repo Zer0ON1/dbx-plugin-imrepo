@@ -370,15 +370,36 @@ func harborImages(ctx context.Context, s *Session, params map[string]any) (any, 
 }
 
 func harborDeleteTag(ctx context.Context, s *Session, params map[string]any) (any, error) {
-	if err := guardTagNotProtected(s, strParam(params, "tag")); err != nil {
+	if err := deleteTagGuarded(ctx, s, strParam(params, "project"), strParam(params, "repository"),
+		strParam(params, "reference"), strParam(params, "tag")); err != nil {
 		return nil, err
 	}
-	return map[string]any{"ok": true}, s.Harbor.DeleteTag(ctx,
-		strParam(params, "project"), strParam(params, "repository"),
-		strParam(params, "reference"), strParam(params, "tag"))
+	return map[string]any{"ok": true}, nil
+}
+
+// deleteTagGuarded is the one way a tag is deleted on Harbor, guards included.
+//
+// It exists because the guards were on the RPC handler while the MCP tool called
+// the client method directly — so the AI path had the glob protection (which the
+// tool asked for itself) but not the retention window, which had just been added
+// to the handler. A guard that lives beside one caller is a guard the next caller
+// does not get; keeping the check and the delete in the same function is what
+// makes "the tools cannot get around the rules" true rather than intended.
+func deleteTagGuarded(ctx context.Context, s *Session, project, repo, reference, tag string) error {
+	if err := guardTagNotProtected(s, tag); err != nil {
+		return err
+	}
+	if err := s.guardRetentionWindow(ctx, project, repo, tag, reference); err != nil {
+		return err
+	}
+	return s.Harbor.DeleteTag(ctx, project, repo, reference, tag)
 }
 
 func harborDeleteArtifact(ctx context.Context, s *Session, params map[string]any) (any, error) {
+	if err := s.guardRetentionWindow(ctx, strParam(params, "project"), strParam(params, "repository"),
+		"", strParam(params, "reference")); err != nil {
+		return nil, err
+	}
 	return map[string]any{"ok": true}, s.Harbor.DeleteArtifact(ctx,
 		strParam(params, "project"), strParam(params, "repository"), strParam(params, "reference"))
 }

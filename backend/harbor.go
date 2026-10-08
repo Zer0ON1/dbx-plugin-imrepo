@@ -721,6 +721,26 @@ type ProjectImage struct {
 // repository, plus the totals the view shows up top. RepositoryErrors and
 // Truncated are reported rather than swallowed so a partial walk never reads as
 // a complete one.
+// ProjectRepo is one repository as the overview lists it.
+//
+// The overview used to show one row per artifact, which on a real project meant
+// 58 rows for 13 repositories — the same name repeated, each row carrying that
+// single artifact's tag count, so the column read 1 or 0 almost everywhere.
+// A repository is the unit people think in here; the per-image detail is one
+// click away, in the repository's own tag view.
+type ProjectRepo struct {
+	Repository string   `json:"repository"`
+	ImageCount int      `json:"imageCount"`
+	TagCount   int      `json:"tagCount"`
+	TotalSize  int64    `json:"totalSize"`
+	PushedAt   string   `json:"pushedAt"`
+	Arches     []string `json:"arches,omitempty"`
+	// The newest tag and its digest, which is what a pull command and a
+	// vulnerability lookup need. Empty when the repository holds no tagged image.
+	LatestTag    string `json:"latestTag,omitempty"`
+	LatestDigest string `json:"latestDigest,omitempty"`
+}
+
 type ProjectImages struct {
 	Project         string         `json:"project"`
 	RepositoryCount int            `json:"repositoryCount"`
@@ -728,8 +748,11 @@ type ProjectImages struct {
 	TagCount        int            `json:"tagCount"`
 	TotalSize       int64          `json:"totalSize"`
 	Images          []ProjectImage `json:"images"`
-	Truncated       bool           `json:"truncated"`
-	RepoErrors      []string       `json:"repositoryErrors,omitempty"`
+	// Repositories is what the overview table renders; Images stays because the
+	// numbers above are derived from it and the per-image view still needs it.
+	Repositories []ProjectRepo `json:"repositories"`
+	Truncated    bool          `json:"truncated"`
+	RepoErrors   []string      `json:"repositoryErrors,omitempty"`
 }
 
 // ProjectImages walks every repository in a project and aggregates its artifacts
@@ -780,7 +803,65 @@ func (h *HarborClient) ProjectImages(ctx context.Context, project string, maxRep
 	for _, im := range out.Images {
 		out.TotalSize += im.Size
 	}
+	out.Repositories = aggregateRepositories(out.Images, repos)
 	return out, nil
+}
+
+// aggregateRepositories folds the per-artifact listing into one row per
+// repository: how many images it holds, how many tags point at them, their
+// combined size, when it was last pushed, and the newest tag to pull.
+func aggregateRepositories(images []ProjectImage, repos []HarborRepository) []ProjectRepo {
+	byName := map[string]*ProjectRepo{}
+	archSeen := map[string]map[string]bool{}
+	for _, im := range images {
+		r := byName[im.Repository]
+		if r == nil {
+			r = &ProjectRepo{Repository: im.Repository}
+			byName[im.Repository] = r
+			archSeen[im.Repository] = map[string]bool{}
+		}
+		r.ImageCount++
+		r.TagCount += im.TagCount
+		r.TotalSize += im.Size
+		// Images arrive newest first, so the first one seen for a repository is
+		// its most recent — and the first tagged one is what a pull uses.
+		if im.PushTime > r.PushedAt {
+			r.PushedAt = im.PushTime
+		}
+		if r.LatestTag == "" && len(im.Tags) > 0 {
+			r.LatestTag = im.Tags[0]
+			r.LatestDigest = im.Digest
+		}
+		for _, a := range im.Arches {
+			archSeen[im.Repository][a] = true
+		}
+	}
+	// Repositories that reported no artifacts still belong in the list: an empty
+	// repository is a fact about the registry, not a reason to omit the name.
+	for _, repo := range repos {
+		if byName[repo.Name] == nil {
+			byName[repo.Name] = &ProjectRepo{Repository: repo.Name}
+			archSeen[repo.Name] = map[string]bool{}
+		}
+	}
+
+	out := make([]ProjectRepo, 0, len(byName))
+	for name, r := range byName {
+		arches := make([]string, 0, len(archSeen[name]))
+		for a := range archSeen[name] {
+			arches = append(arches, a)
+		}
+		sort.Strings(arches)
+		r.Arches = arches
+		out = append(out, *r)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].PushedAt != out[j].PushedAt {
+			return out[i].PushedAt > out[j].PushedAt
+		}
+		return out[i].Repository < out[j].Repository
+	})
+	return out
 }
 
 // TriggerScan asks Harbor to scan (or rescan) one artifact.
@@ -1118,4 +1199,83 @@ func (h *HarborClient) SaveRetention(ctx context.Context, project string, projec
 		return mgmtErr("creating the retention policy", code, data, nil)
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Retention window
+// ---------------------------------------------------------------------------
+
+// retentionWindowBlocked refuses an operation that would remove one of the
+// newest KeepTagged artifacts of a repository.
+//
+// "Keep the newest N artifacts" cannot be answered from a tag name — unlike the
+// ProtectTags globs, it needs the repository's artifacts and their push times —
+// so this guard costs a listing. It is consulted only when the setting is
+// non-zero, so a connection that does not use the window pays nothing.
+//
+// The window was a UI hint for a long time: artifacts outside it were marked and
+// nothing more, while deleting one of the newest N succeeded and contradicted
+// what the setting says. It is enforced now, which is what the setting's name
+// promises.
+//
+// Harbor only: a plain OCI v2 registry's tag list carries no push times, so
+// "newest" is not knowable there. Saying so is better than ranking tags by name
+// and calling that recency.
+func (h *HarborClient) retentionWindowBlocked(ctx context.Context, project, repo, tag, digest string, keep int) error {
+	if keep <= 0 {
+		return nil
+	}
+	arts, err := h.Artifacts(ctx, project, repo)
+	if err != nil {
+		// A protection rule that fails open is not a protection rule. Refuse,
+		// and say why, so the operator can retry rather than assume it passed.
+		return fmt.Errorf("could not check the retention window for %s/%s (%v); refusing rather than skipping the check", project, repo, err)
+	}
+	sort.SliceStable(arts, func(i, j int) bool { return arts[i].PushTime > arts[j].PushTime })
+
+	for i, a := range arts {
+		if i >= keep {
+			break
+		}
+		matched := false
+		if digest != "" && a.Digest == digest {
+			matched = true
+		}
+		if !matched && tag != "" {
+			for _, t := range a.Tags {
+				if t.Name == tag {
+					matched = true
+					break
+				}
+			}
+		}
+		if matched {
+			return fmt.Errorf("this image is one of the %d most recent in %s (retention policy: keep the newest %d), so it is not deleted; change the policy in the plugin settings if that is intended",
+				keep, repo, keep)
+		}
+	}
+	return nil
+}
+
+// retentionKeep is the configured window, or 0 when the connection does not use
+// one.
+func (s *Session) retentionKeep() int {
+	if s == nil {
+		return 0
+	}
+	set, _ := settingsFor(s.Conn.ID)
+	return set.Retention.KeepTagged
+}
+
+// guardRetentionWindow applies the window to one deletion, on the paths where a
+// recency order exists.
+func (s *Session) guardRetentionWindow(ctx context.Context, project, repo, tag, digest string) error {
+	if s == nil || s.RegistryType != registryTypeHarbor {
+		return nil
+	}
+	keep := s.retentionKeep()
+	if keep <= 0 {
+		return nil
+	}
+	return s.Harbor.retentionWindowBlocked(ctx, project, repo, tag, digest, keep)
 }

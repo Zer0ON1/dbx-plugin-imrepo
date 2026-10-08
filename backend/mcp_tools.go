@@ -344,15 +344,12 @@ func mcpDeleteTag(ctx context.Context, s *Session, args map[string]any) (map[str
 		return nil, errors.New("`tag` is required")
 	}
 
-	// The retention policy is checked here for the same reason the RPC dispatch
-	// checks it: the host's confirmation guards against the model acting by
-	// mistake, and does not know what this plugin considers protected.
-	if pattern, blocked := s.tagProtected(tag); blocked {
-		return nil, fmt.Errorf("tag %q is protected by the retention policy (%s) and will not be deleted; change the policy in the plugin settings if that is intended", tag, pattern)
-	}
-
+	// No guard is written here on purpose: this calls the same function the
+	// workbench's delete button calls, so the glob protection and the retention
+	// window are applied once, in one place, to both callers. Duplicating the
+	// check here is how the two paths would drift apart.
 	if s.RegistryType == registryTypeHarbor {
-		if err := s.Harbor.DeleteTag(ctx, project, repo, tag, tag); err != nil {
+		if err := deleteTagGuarded(ctx, s, project, repo, tag, tag); err != nil {
 			return nil, err
 		}
 		return jsonResult(map[string]any{
