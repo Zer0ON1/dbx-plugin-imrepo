@@ -4,7 +4,7 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
-## Unreleased
+## 0.1.7
 
 **The AI path skipped the registry-type detection.** Reported from use: with the
 policy set to keep 5, deleting the 4th-newest through the assistant succeeded on
