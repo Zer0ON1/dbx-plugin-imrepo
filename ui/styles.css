@@ -243,7 +243,21 @@ html, body {
   font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: .6px; color: var(--im-fg-subtle);
 }
-.sidebar-title .new-project { width: 20px; height: 20px; flex-shrink: 0; }
+/* The new-project action: sized and outlined like a button rather than a stray
+   glyph. It keeps its right edge against the 16px padding, so it still lines up
+   with the per-row gears below — it is wider, not shifted. */
+.sidebar-title .new-project {
+  width: 28px; height: 28px; flex-shrink: 0;
+  border: 1px solid var(--im-border-strong);
+  border-radius: var(--im-radius-sm);
+  color: var(--im-fg);
+}
+.sidebar-title .new-project svg { width: 16px; height: 16px; }
+.sidebar-title .new-project:hover {
+  background: var(--im-primary-soft);
+  border-color: var(--im-primary-line);
+  color: var(--im-primary);
+}
 .tree { flex: 1; overflow-y: auto; padding: 4px 8px 12px; }
 
 .tree-item {

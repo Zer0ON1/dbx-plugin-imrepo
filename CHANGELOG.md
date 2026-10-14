@@ -6,6 +6,12 @@ Notable changes per release. Versions follow the plugin id
 
 ## Unreleased
 
+**The new-project button reads as a button.** It was a 20px glyph with no
+border — the smallest target in the sidebar and the least obvious. Now 28px with
+an outline and a hover state, keeping its right edge on the same line as the
+per-row gears so the column still lines up.
+
+
 **Repositories whose name contains a slash could not be opened ([#1]).** Harbor
 allows a repository inside a project to be nested — `kylin/kylin-server-minimal`
 in project `multi-arch` — and its API needs the slash **double**-encoded: the
