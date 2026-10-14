@@ -157,11 +157,14 @@
     IM.$("#projectSettingsBody").innerHTML = IM.loadingHTML();
     // Quota, the Harbor-side scanner policy and the project's scanner settings
     // are independent reads: a failure in one must not blank the whole dialog.
-    const [adminR, quotaR, scanR, scannerSetR] = await Promise.allSettled([
+    const [adminR, quotaR, scanR, scannerSetR, imagesR] = await Promise.allSettled([
       IM.invoke("harbor/projectAdmin", { project, connectionId: IM.state.connectionId }),
       IM.invoke("harbor/quotaGet", { project, connectionId: IM.state.connectionId }),
       IM.invoke("harbor/scannerInfo", { project, connectionId: IM.state.connectionId }),
       IM.invoke("settings/getProject", { project, connectionId: IM.state.connectionId }),
+      // What deleting this project would destroy. The dialog shows the counts
+      // rather than a generic warning, and this is the read that has them.
+      IM.invoke("harbor/images", { project, connectionId: IM.state.connectionId }),
     ]);
     if (adminR.status !== "fulfilled") {
       IM.$("#projectSettingsBody").innerHTML = "";
@@ -169,6 +172,7 @@
       return;
     }
     const data = adminR.value;
+    if (imagesR.status === "fulfilled") data.images = imagesR.value;
     IM.state.projectAdmin = { project, data };
     IM.state.quota = quotaR.status === "fulfilled" ? quotaR.value : null;
     IM.state.quotaError = quotaR.status === "fulfilled" ? null : (quotaR.reason?.message || IM.t("project.quotaFailed"));
@@ -326,6 +330,175 @@
     const acts = IM.el("div", "set-actions"); acts.appendChild(saveBtn);
     secR.appendChild(acts);
     body.appendChild(secR);
+
+    body.appendChild(IM.renderDangerZone(project, data));
+  }
+
+  /**
+   * The danger zone: deleting the project and everything in it.
+   *
+   * Deleting a project is the only operation here with no undo — the
+   * repositories, their artifacts and their tags go with it, and the disk space
+   * only comes back when the registry next runs garbage collection. So it is
+   * gated on typing the project name, the same way the backend gates the RPC:
+   * a number in a dialog can be approved by reflex, a name has to be read.
+   *
+   * The warning carries real counts rather than adjectives. "This will delete a
+   * project" says nothing; "4 repositories, 37 images, 12 GB" is the thing that
+   * makes someone stop.
+   */
+  IM.renderDangerZone = function renderDangerZone(project, data) {
+    const imgs = (data && data.images) || {};
+    const stats = [];
+    if (imgs.repositoryCount !== undefined) stats.push(imgs.repositoryCount + " " + IM.t("imagesRepos"));
+    if (imgs.imageCount !== undefined) stats.push(imgs.imageCount + " " + IM.t("imagesCount"));
+    if (imgs.tagCount !== undefined) stats.push(imgs.tagCount + " " + IM.t("imagesTags"));
+    if (imgs.totalSize) stats.push(IM.fmtSize(imgs.totalSize));
+
+    // Protected tags are worth naming: the project delete takes them with it,
+    // and the retention policy is the one thing that would have refused a
+    // single-tag delete.
+    const protectedTags = [];
+    for (const im of (imgs.images || [])) {
+      for (const t of (im.tags || [])) {
+        if (IM.protectedPattern(t) && !protectedTags.includes(t)) protectedTags.push(t);
+      }
+    }
+
+    return IM.confirmGate({
+      title: IM.t("project.danger"),
+      warn: IM.t("project.deleteWarn"),
+      stats,
+      extra: protectedTags.length
+        ? IM.t("project.deleteProtected") + ": " + protectedTags.slice(0, 8).join(", ")
+        : "",
+      name: project,
+      action: IM.t("project.delete"),
+      buttonId: "btnProjectDelete",
+      onConfirm: async (confirm) => {
+        await IM.invoke("harbor/projectDelete", {
+          project, confirm, connectionId: IM.state.connectionId,
+        });
+        IM.toast(IM.t("project.deleted"), "ok");
+        IM.$("#projectSettingsModal").hidden = true;
+        // The project is gone: drop the view that was showing it and re-read the
+        // tree, rather than leaving a pane pointing at something that no longer
+        // exists.
+        IM.state.current = { project: null, repo: null };
+        IM.state.expandedProject = null;
+        IM.state.projects = [];
+        IM.setCrumbs([]);
+        IM.$("#contentBody").innerHTML = "";
+        await IM.bootstrap();
+      },
+    });
+  }
+
+  /**
+   * The typed-confirmation gate, shared by the project and repository deletes.
+   *
+   * One implementation, because the two differ only in wording: the gate is the
+   * whole safety mechanism here, and two copies of a safety mechanism drift.
+   * Returns the section to append, with the callback wired up.
+   */
+  IM.confirmGate = function confirmGate(opts) {
+    const sec = IM.el("section", "set-section danger-zone");
+    const head = IM.el("div", "set-head");
+    head.appendChild(IM.el("h4", "", opts.title));
+    head.appendChild(IM.el("span", "badge", IM.t("project.dangerBadge")));
+    sec.appendChild(head);
+
+    const warn = IM.el("div", "danger-warn");
+    warn.appendChild(IM.el("p", "", opts.warn));
+    if (opts.stats && opts.stats.length) {
+      warn.appendChild(IM.el("p", "danger-stats", opts.stats.join("  ·  ")));
+    }
+    sec.appendChild(warn);
+    if (opts.extra) sec.appendChild(IM.el("p", "hint warn", opts.extra));
+
+    const row = IM.el("div", "danger-row");
+    const input = IM.el("input", "set-input mono");
+    input.placeholder = opts.name;
+    input.setAttribute("aria-label", IM.t("project.deleteConfirmLabel"));
+    const btn = IM.el("button", "btn btn-danger btn-sm", opts.action);
+    btn.id = opts.buttonId;
+    btn.disabled = true;
+    const sync = () => {
+      // Trimmed and compared whole: a name that merely contains the target
+      // string is not a confirmation of this target.
+      btn.disabled = input.value.trim() !== opts.name;
+    };
+    input.addEventListener("input", sync);
+    const go = async () => {
+      btn.disabled = true;
+      try {
+        await opts.onConfirm(input.value.trim());
+      } catch (e) {
+        IM.toast(e.message || IM.t("failed"), "err");
+        sync();
+      }
+    };
+    btn.addEventListener("click", go);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !btn.disabled) go(); });
+
+    row.append(input, btn);
+    sec.appendChild(row);
+    sec.appendChild(IM.el("p", "hint", IM.t("project.deleteConfirmHint")));
+    return sec;
+  }
+
+  /** Open the repository-delete dialog for the repository on screen. */
+  IM.openRepoDelete = function openRepoDelete() {
+    const project = IM.state.current.project;
+    const repo = IM.shortRepo();
+    if (!project || !repo) return;
+    IM.$("#repoDeleteModal").hidden = false;
+    const body = IM.$("#repoDeleteBody");
+    body.innerHTML = "";
+
+    // Counts from the listing already on screen: the warning has to say what
+    // goes, and these are the numbers the operator is looking at.
+    const arts = IM.state.artifacts || [];
+    let size = 0, tags = 0;
+    for (const a of arts) {
+      size += a.size || 0;
+      tags += (a.tags || []).length;
+    }
+    const stats = [];
+    if (arts.length) stats.push(arts.length + " " + IM.t("imagesCount"));
+    if (tags) stats.push(tags + " " + IM.t("imagesTags"));
+    if (size) stats.push(IM.fmtSize(size));
+
+    const protectedTags = [];
+    for (const a of arts) {
+      for (const t of (a.tags || [])) {
+        if (IM.protectedPattern(t) && !protectedTags.includes(t)) protectedTags.push(t);
+      }
+    }
+
+    body.appendChild(IM.confirmGate({
+      title: IM.t("repo.delete"),
+      warn: IM.t("repo.deleteWarn").replace("{repo}", repo),
+      stats,
+      extra: protectedTags.length
+        ? IM.t("project.deleteProtected") + ": " + protectedTags.slice(0, 8).join(", ")
+        : "",
+      name: repo,
+      action: IM.t("repo.delete"),
+      buttonId: "btnRepoDeleteConfirm",
+      onConfirm: async (confirm) => {
+        await IM.invoke("harbor/repoDelete", {
+          project, repository: repo, confirm, connectionId: IM.state.connectionId,
+        });
+        IM.toast(IM.t("repo.deleted"), "ok");
+        IM.$("#repoDeleteModal").hidden = true;
+        // The repository is gone: leave the project overview rather than a pane
+        // pointing at something that no longer exists.
+        IM.state.current.repo = null;
+        IM.invalidate();
+        IM.goToProject(project);
+      },
+    }));
   }
 
   IM.removeMember = async function removeMember(project, m) {

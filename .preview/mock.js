@@ -314,6 +314,8 @@
     "harbor/retentionSave": { ok: true, retentionId: 12 },
     "harbor/userAdmin": { ok: true },
     "harbor/deleteTag": { ok: true },
+    "harbor/projectDelete": { ok: true },
+    "harbor/repoDelete": { ok: true },
     "registry/delete": { ok: true },
     "harbor/gcGet": {
       configured: true, id: 14, type: "Daily", cron: "0 0 0 * * *",
@@ -490,6 +492,23 @@
         return params.get("gcnone")
           ? { configured: false }
           : JSON.parse(JSON.stringify(RESPONSES["harbor/gcGet"]));
+      }
+      if (method === "harbor/repoDelete") {
+        const want = (p && p.repository) || "";
+        if (String((p && p.confirm) || "").trim() !== want) {
+          throw new Error("to delete the repository, repeat its name exactly in `confirm` (got \"" + ((p && p.confirm) || "") + "\", expected \"" + want + "\")");
+        }
+        return { ok: true, deleted: want };
+      }
+      if (method === "harbor/projectDelete") {
+        // Mirrors the backend's gate: the confirmation has to be the project
+        // name itself, so a mock that accepted anything would hide exactly the
+        // check the UI is there to satisfy.
+        const want = (p && p.project) || "";
+        if (String((p && p.confirm) || "").trim() !== want) {
+          throw new Error("to delete the project, repeat its name exactly in `confirm` (got \"" + ((p && p.confirm) || "") + "\", expected \"" + want + "\")");
+        }
+        return { ok: true, deleted: want, message: "project " + want + " deleted" };
       }
       if (method === "harbor/deleteTag" || method === "registry/delete") {
         // The repository listing carries the counts the tree renders; a delete
@@ -677,8 +696,13 @@
       setTimeout(again, 600);
     }
     if (params.get("projectsettings")) {
-      // Open the per-folder settings dialog for the first project.
-      setTimeout(() => document.querySelector(".tree-item .tree-settings")?.click(), 800);
+      // Open the per-folder settings dialog. ?projectsettings=1 takes the first
+      // project; ?projectsettings=<name> takes that one, which a test needs when
+      // it has to type the project's own name into the danger zone.
+      const wanted = params.get("projectsettings");
+      const row = wanted === "1" ? null : byText(wanted);
+      const gearSel = row ? null : ".tree-item .tree-settings";
+      setTimeout(() => (row ? row.querySelector(".tree-settings") : document.querySelector(gearSel))?.click(), 800);
       if (params.get("armapply")) {
         // Flip the first policy switch (autoScan), then arm the two-step apply.
         setTimeout(() => {
@@ -728,6 +752,36 @@
         sel.value = logScope === "all" ? "" : logScope;
         sel.dispatchEvent(new Event("change", { bubbles: true }));
       }, 1400);
+    }
+    if (params.get("modaldel")) {
+      // Open the repository-delete dialog; ?repodelete=<text> types into its gate
+      // and ?repodeletego=1 presses the button.
+      setTimeout(() => document.getElementById("btnRepoDelete")?.click(), 1200);
+      const text = params.get("repodelete");
+      if (text) {
+        setTimeout(() => {
+          const inp = document.querySelector("#repoDeleteBody .danger-row .set-input");
+          if (!inp) { document.documentElement.dataset.probeRepoDelete = "missing"; return; }
+          inp.value = text;
+          inp.dispatchEvent(new Event("input", { bubbles: true }));
+          if (params.get("repodeletego")) {
+            setTimeout(() => document.getElementById("btnRepoDeleteConfirm")?.click(), 600);
+          }
+        }, 1800);
+      }
+    }
+    if (params.get("typedelete")) {
+      // Type into the danger-zone input; ?deletedanger=1 then presses the button
+      // so a test can tell "the gate held" apart from "nobody tried".
+      setTimeout(() => {
+        const inp = document.querySelector("#projectSettingsBody .danger-row .set-input");
+        if (!inp) { document.documentElement.dataset.probeDanger = "missing"; return; }
+        inp.value = params.get("typedelete");
+        inp.dispatchEvent(new Event("input", { bubbles: true }));
+        if (params.get("deletedanger")) {
+          setTimeout(() => document.getElementById("btnProjectDelete")?.click(), 600);
+        }
+      }, 1500);
     }
     if (params.get("openlogs")) setTimeout(() => {
       document.getElementById("btnLogs")?.click();

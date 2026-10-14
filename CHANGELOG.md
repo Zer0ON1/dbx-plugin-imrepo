@@ -4,6 +4,33 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
+## Unreleased
+
+**Deleting a repository or a whole project.** Harbor has always allowed both,
+and the workbench offered neither — which left the platform's own web UI as the
+only way to remove a project. Both are now in reach, behind a typed
+confirmation.
+
+Deleting a project takes its repositories, their artifacts and their tags with
+it — there is no undo and no soft delete — so the danger zone asks for the
+**name** to be typed, not a checkbox: a number in a dialog gets approved by
+reflex, a name has to be read. The same check lives in the backend, so a
+mis-wired button, a script or an assistant cannot delete a project by sending
+the right id and nothing else. The dialog carries the counts it is about to
+destroy (repositories, images, tags, total size) and names any
+policy-protected tags that would go with it — a single-tag delete would have
+been refused for those, so the project delete has to say that it is above that
+rule.
+
+The assistant's tool surface exposes the same two operations
+(`delete_repository`, `delete_project`), with `confirm` required by the schema
+and checked by the handler the workbench calls — one gate, every caller. That
+work also fixed a name bug on the tool path: a repository name may itself
+contain slashes (`kylin/kylin-server-minimal` inside one project), and the
+argument helper cut at the last slash, turning a nested repository into a
+different, non-existent one. It now drops the project prefix only, which is
+what the workbench has done since 0.1.8.
+
 ## 0.1.8
 
 **The new-project button reads as a button.** It was a 20px glyph with no

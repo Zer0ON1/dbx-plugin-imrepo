@@ -1216,6 +1216,43 @@ func (h *HarborClient) SaveRetention(ctx context.Context, project string, projec
 	return nil
 }
 
+// DeleteProject removes a Harbor project and everything in it.
+//
+// There is no undo and no soft-delete: the repositories, their artifacts and
+// their tags go with it, and the disk space is only reclaimed when the registry
+// next runs garbage collection. The caller is expected to have obtained an
+// explicit, typed confirmation — see the confirm argument on the RPC.
+func (h *HarborClient) DeleteProject(ctx context.Context, project string) error {
+	p := url.PathEscape(project)
+	data, code, err := h.do(ctx, http.MethodDelete, "/api/v2.0/projects/"+p)
+	if err != nil {
+		return err
+	}
+	if code != http.StatusOK && code != http.StatusNoContent && code != http.StatusAccepted {
+		return mgmtErr("deleting the project", code, data, nil)
+	}
+	return nil
+}
+
+// DeleteRepository removes a repository and every artifact in it.
+//
+// Like deleting a project, there is no undo: the artifacts and their tags go
+// with it, and the space returns only at the next garbage collection. The name
+// is double-encoded for the same reason every other repository call is — Harbor
+// allows the name to contain slashes.
+func (h *HarborClient) DeleteRepository(ctx context.Context, project, repo string) error {
+	p := url.PathEscape(project)
+	r := escapeRepo(repo)
+	data, code, err := h.do(ctx, http.MethodDelete, "/api/v2.0/projects/"+p+"/repositories/"+r)
+	if err != nil {
+		return err
+	}
+	if code != http.StatusOK && code != http.StatusNoContent && code != http.StatusAccepted {
+		return mgmtErr("deleting the repository", code, data, nil)
+	}
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Retention window
 // ---------------------------------------------------------------------------

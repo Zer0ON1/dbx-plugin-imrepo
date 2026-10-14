@@ -696,6 +696,17 @@ html, body {
 
 /* ---------- Audit logs ---------- */
 /* Registry GC section: label/control rows, matching the settings panel's frame. */
+/* Danger zone: the one section that deletes something without an undo. It is
+   set apart visually so it is never mistaken for a normal setting. */
+.danger-zone { border: 1px solid var(--im-danger); }
+.danger-zone .set-head h4 { color: var(--im-danger); }
+.danger-zone .badge { background: var(--im-danger-soft); color: var(--im-danger); border-color: var(--im-danger); }
+.danger-warn { background: var(--im-danger-soft); border-radius: var(--im-radius-sm); padding: 10px 12px; margin: 8px 0; }
+.danger-warn p { margin: 0; font-size: 12.5px; color: var(--im-fg); }
+.danger-warn .danger-stats { margin-top: 6px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.danger-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.danger-row .set-input { width: 220px; font-family: var(--im-mono); }
+
 .gc-box { display: flex; flex-direction: column; gap: 6px; }
 /* The schedule at a glance: four equal columns, labels above their values, so
    type / cron / next run / last status read as one line. */

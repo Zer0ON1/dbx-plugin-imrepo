@@ -143,6 +143,23 @@ var mcpTools = []mcpTool{
 			"tag":        strProp("Tag to delete."),
 		}, "project", "repository", "tag"),
 	},
+	{
+		Name:        "delete_repository",
+		Description: "Delete a whole repository and every image, tag and artifact in it. Harbor only — a plain OCI v2 registry has no repository-level delete. There is no undo, and the disk space only comes back when the registry next runs garbage collection. `confirm` must repeat the repository name exactly, so the target has to be written out before anything is removed.",
+		InputSchema: schema(map[string]any{
+			"project":    strProp("Project name."),
+			"repository": strProp("Repository name, without the project prefix."),
+			"confirm":    strProp("Repeat `repository` exactly. The delete is refused unless this matches — a partial or misspelled name removes nothing."),
+		}, "project", "repository", "confirm"),
+	},
+	{
+		Name:        "delete_project",
+		Description: "Delete a whole Harbor project and everything in it — its repositories, images and tags. Harbor only. There is no undo, and the disk space only comes back when the registry next runs garbage collection. `confirm` must repeat the project name exactly, so the target has to be written out before anything is removed.",
+		InputSchema: schema(map[string]any{
+			"project": strProp("Project name."),
+			"confirm": strProp("Repeat `project` exactly. The delete is refused unless this matches — a partial or misspelled name removes nothing."),
+		}, "project", "confirm"),
+	},
 }
 
 func toolByName(name string) *mcpTool {
@@ -284,6 +301,10 @@ func runMCPTool(ctx context.Context, s *Session, name string, args map[string]an
 		return mcpRetag(ctx, s, args)
 	case "delete_tag":
 		return mcpDeleteTag(ctx, s, args)
+	case "delete_repository":
+		return mcpDeleteRepository(ctx, s, args)
+	case "delete_project":
+		return mcpDeleteProject(ctx, s, args)
 	}
 	return nil, fmt.Errorf("unknown tool %q", name)
 }
@@ -297,15 +318,22 @@ func projectArg(args map[string]any) (string, error) {
 	return p, nil
 }
 
-func repoArg(args map[string]any) (string, error) {
+func repoArg(args map[string]any, project string) (string, error) {
 	r := strings.TrimSpace(strParam(args, "repository"))
 	if r == "" {
 		return "", fmt.Errorf("`repository` is required — call list_repositories to see the available names")
 	}
-	// Tolerate a fully-qualified name: the UI passes short names to Harbor's API
-	// and full names to /v2/, and a model will produce either.
-	if i := strings.LastIndex(r, "/"); i >= 0 {
-		r = r[i+1:]
-	}
-	return r, nil
+	return shortRepoName(r, project), nil
+}
+
+// shortRepoName drops the project prefix from a repository name, and only when
+// it is actually there.
+//
+// Tolerated because the UI passes short names to Harbor's API and full names to
+// /v2/, and a model will produce either. The cut is made on the prefix, not on
+// the last slash: Harbor allows a repository name to contain slashes
+// ("kylin/kylin-server-minimal" inside one project), so cutting at the last
+// slash would turn a nested repository into a different, non-existent one.
+func shortRepoName(name, project string) string {
+	return strings.TrimPrefix(name, project+"/")
 }

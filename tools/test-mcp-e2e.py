@@ -256,7 +256,7 @@ def main() -> int:
         print("\nA) mcp/tools declares the surface")
         tools = sc.result("mcp/tools", {"connectionId": CONN}).get("tools") or []
         names = [t["name"] for t in tools]
-        check("the nine tools are declared", len(tools) == 9, names)
+        check("the eleven tools are declared", len(tools) == 11, names)
         check("reads come first",
               names[:5] == ["list_projects", "list_repositories", "list_tags", "image_info", "vulnerabilities"],
               names)
@@ -265,7 +265,13 @@ def main() -> int:
               readonly == {"list_projects", "list_repositories", "list_tags", "image_info", "vulnerabilities"},
               readonly)
         check("no write tool carries readOnlyHint",
-              not readonly & {"create_project", "set_project_public", "retag", "delete_tag"}, readonly)
+              not readonly & {"create_project", "set_project_public", "retag", "delete_tag",
+                              "delete_repository", "delete_project"}, readonly)
+        whole = {t["name"]: t for t in tools if t["name"] in ("delete_repository", "delete_project")}
+        check("the whole-object deletes declare `confirm` as required",
+              len(whole) == 2 and all("confirm" in (t["inputSchema"].get("required") or [])
+                                      for t in whole.values()),
+              {n: t["inputSchema"].get("required") for n, t in whole.items()})
         check("every schema is an object with properties",
               all(t["inputSchema"].get("type") == "object" and "properties" in t["inputSchema"] for t in tools))
         info_tool = next(t for t in tools if t["name"] == "image_info")
@@ -386,6 +392,51 @@ def main() -> int:
         gone = as_json("delete_tag", project=PROJECT, repository="ledger-api", tag="v1")
         check("an unprotected tag deletes normally", gone.get("ok") is True, gone)
         check("...with a DELETE for that tag", any(d.endswith("/tags/v1") for d in DELETES), DELETES)
+
+        print("\nE2) deleting a repository or a project needs the name repeated")
+        # The two operations on this surface with no undo. The gate is the typed
+        # name, and it is the handler's check — the same one the workbench's
+        # delete dialog has to satisfy — so a model that echoes an id, or
+        # shortens the name, deletes nothing.
+        DELETES.clear(); REQUESTS.clear()
+
+        partial = sc.tool("delete_project", project=PROJECT, confirm="paym")
+        check("a partial project name is refused", partial.get("isError") is True, partial)
+        check("...and nothing reaches the registry", not DELETES, DELETES)
+
+        unconfirmed = sc.tool("delete_project", project=PROJECT)
+        check("a delete with no confirmation at all is refused",
+              unconfirmed.get("isError") is True, unconfirmed)
+        check("...and still nothing is sent", not DELETES, DELETES)
+
+        gone = as_json("delete_project", project=PROJECT, confirm=PROJECT)
+        check("the exact project name deletes it", gone.get("ok") is True, gone)
+        check("...with a DELETE for that project",
+              any(m == "DELETE" and p.endswith("/projects/" + PROJECT) for m, p in REQUESTS), REQUESTS)
+
+        DELETES.clear()
+        partial = sc.tool("delete_repository", project=PROJECT, repository="ledger-api", confirm="ledger")
+        check("a partial repository name is refused", partial.get("isError") is True, partial)
+        check("...and nothing reaches the registry", not DELETES, DELETES)
+
+        gone = as_json("delete_repository", project=PROJECT, repository="ledger-api", confirm="ledger-api")
+        check("the exact repository name deletes it", gone.get("ok") is True, gone)
+        check("...with a DELETE for that repository",
+              any(m == "DELETE" and "/repositories/" in p for m, p in REQUESTS), REQUESTS)
+        check("...double-encoded, so a nested name would resolve too",
+              any("%252F" in p or p.endswith("/repositories/ledger-api") for m, p in REQUESTS if m == "DELETE"),
+              [p for m, p in REQUESTS if m == "DELETE"])
+
+        # A fully-qualified nested name, written the same way in the target and
+        # in the confirmation: the project prefix is stripped, the slash inside
+        # the name is not. Cutting at the last slash would have deleted
+        # "ledger-api" — a different, non-existent repository — instead.
+        DELETES.clear()
+        as_json("delete_repository", project=PROJECT,
+                repository=PROJECT + "/nested/ledger-api",
+                confirm=PROJECT + "/nested/ledger-api")
+        check("a fully-qualified nested name keeps its slash",
+              any("nested%252Fledger-api" in d for d in DELETES), DELETES)
 
         print("\nF) failures are readable, not fatal")
         unknown = sc.tool("no_such_tool", project=PROJECT)

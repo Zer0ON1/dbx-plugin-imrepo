@@ -84,6 +84,13 @@
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6.5 1.5h3l.4 1.2H13v1.6H3V2.7h3.1l.4-1.2ZM4.1 5.8h7.8l-.55 7.6A1.5 1.5 0 0 1 9.85 14.8H6.15a1.5 1.5 0 0 1-1.5-1.4L4.1 5.8Z"/></svg>
               <span data-i18n="cleanup">清理无 Tag</span>
             </button>
+            <!-- Deleting a repository takes every artifact and tag with it and
+                 cannot be undone, so it sits apart from the ordinary actions. -->
+            <button class="btn btn-danger-outline btn-sm" id="btnRepoDelete" hidden
+                    title="删除整个仓库" data-i18n-title="repo.delete">
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6.5 1.5h3l.4 1.2H13v1.6H3V2.7h3.1l.4-1.2ZM4.1 5.8h7.8l-.55 7.6A1.5 1.5 0 0 1 9.85 14.8H6.15a1.5 1.5 0 0 1-1.5-1.4L4.1 5.8Z"/></svg>
+              <span data-i18n="repo.delete">删除仓库</span>
+            </button>
           </div>
         </div>
         <div class="content-body" id="contentBody">
@@ -216,6 +223,17 @@
       <div class="modal-body" id="logsBody"></div>
       <div class="modal-footer">
         <button class="btn btn-ghost" data-close="logsModal" data-i18n="close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete repository (typed confirmation) -->
+  <div class="modal-mask" id="repoDeleteModal" hidden>
+    <div class="modal">
+      <div class="modal-header"><h3 data-i18n="repo.delete">删除仓库</h3></div>
+      <div class="modal-body" id="repoDeleteBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="repoDeleteModal" data-i18n="cancel">取消</button>
       </div>
     </div>
   </div>

@@ -142,6 +142,7 @@
   IM.setupUI = function setupUI() {
     IM.$("#btnRefresh").addEventListener("click", () => IM.reloadContent(true));
     IM.$("#btnSettings").addEventListener("click", IM.openSettings);
+    IM.$("#btnRepoDelete").addEventListener("click", IM.openRepoDelete);
     IM.$("#retagSource").addEventListener("change", IM.refreshRetagProtection);
     IM.$("#btnSettingsSave").addEventListener("click", IM.saveSettings);
     // Restoring defaults is two-step: a stray click must not wipe a policy the

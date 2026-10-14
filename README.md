@@ -44,6 +44,7 @@ CI 另在 ubuntu / windows / macos 三个真实 runner 上各自跑一遍完整�
 | **总览页签与图表** | 统计卡 + SVG 横向柱状图（Harbor：拉取最多的项目、项目存储分布；V2：命名空间存储分布） |
 | **架构结构展示** | 多架构镜像按平台逐个展示为**一个圆圈徽章**（`linux/amd64`、`linux/arm64`…），V2 侧懒加载回填 |
 | Tag 管理 | Tag 列表、**重命名**（写新 Tag + 删原 Tag）、删除（OCI DELETE / Harbor 原生） |
+| **删除仓库 / 项目** | 整仓、整项目删除（Harbor）：危险区先列出将失去的**真实计数**（仓库/镜像/Tag/大小）与受保留策略保护的 Tag，**必须键入目标名**才能执行；确认在后端校验，绕过界面也拦得住 |
 | 镜像层解析 | Manifest → Index → Config Blob 逐层指令；每层大小（占比条 + 百分比 + 最大层高亮 + 按大小排序） |
 | 漏洞报告 | Harbor/Trivy CVE 分级统计 + **按设置阈值判定**「已达/未达阈值」+ 缓存 + 刷新/触发扫描 |
 | 运维清理 | **清理无 Tag 孤立 Artifact**：只读扫描 → 列清单（含大小与合计）→ 勾选确认 → 逐个**复核后**删除；受规则保护的条目不可选并给出原因 |
@@ -65,6 +66,7 @@ REST API 的功能只在 Harbor 上出现。**界面上不可用的按钮会置�
 | 每 tag 的 sha256 | ✅ | ✅ | v2 的 `tags/list` 不带 digest，与架构读同一次请求取回 |
 | Tag 重命名 | ✅ | ✅ | 重命名 = 写新 Tag + 删原 Tag（OCI 无 rename 原语） |
 | Tag 删除 | ✅ | ✅ | 走 OCI `DELETE`（需仓库开启删除；Harbor 用原生接口按 Tag 删） |
+| 删除仓库 / 项目 | ✅ | ❌ | v2 协议没有仓库级删除接口（只能逐个 tag 删），也没有项目对象；两者都是 Harbor 的 REST 资源 |
 | 镜像层逐层解析 | ✅ | ✅ | — |
 | 拉取命令生成 | ✅ | ✅ | — |
 | 总览图表（存储分布） | ✅ | ✅ | — |
@@ -126,6 +128,8 @@ REST API 的功能只在 Harbor 上出现。**界面上不可用的按钮会置�
 | `set_project_public` | 切换项目可见性（仅 Harbor） | ✅ |
 | `retag` | 重命名 tag | ✅ |
 | `delete_tag` | 删除 tag | ✅ |
+| `delete_repository` | 删除整个仓库，`confirm` 必须逐字重复仓库名（仅 Harbor） | ✅ |
+| `delete_project` | 删除整个项目，`confirm` 必须逐字重复项目名（仅 Harbor） | ✅ |
 
 ### 安全边界
 

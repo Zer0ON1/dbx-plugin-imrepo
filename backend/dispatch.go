@@ -121,10 +121,14 @@ var sessionMethods = map[string]sessionHandler{
 	"harbor/projectAdmin":     harborOnly(harborProjectAdmin),
 	"harbor/projectCreate":    createProject,
 	"harbor/projectSetPublic": harborOnly(harborProjectSetPublic),
-	"harbor/quotaGet":         quotaGet,
-	"harbor/quotaSet":         quotaSet,
-	"harbor/retentionSave":    harborOnly(saveRetention),
-	"harbor/logs":             harborLogs,
+	// Deleting a whole project is the one operation with no undo, so it carries
+	// its own confirmation gate (below) rather than relying on the view.
+	"harbor/projectDelete": harborOnly(harborProjectDelete),
+	"harbor/repoDelete":    harborOnly(harborRepoDelete),
+	"harbor/quotaGet":      quotaGet,
+	"harbor/quotaSet":      quotaSet,
+	"harbor/retentionSave": harborOnly(saveRetention),
+	"harbor/logs":          harborLogs,
 	// Harbor's own registry GC — what reclaims the blobs that artifact
 	// deletions orphan.
 	"harbor/gcGet":        harborOnly(func(ctx context.Context, s *Session, _ map[string]any) (any, error) { return gcGet(ctx, s) }),
@@ -447,6 +451,61 @@ func harborProjectAdmin(ctx context.Context, s *Session, params map[string]any) 
 		return nil, err
 	}
 	return projectAdmin(ctx, s, project)
+}
+
+// harborRepoDelete removes a repository and everything in it.
+//
+// Gated the same way as the project delete and for the same reason: it takes
+// every artifact and tag with it, so `confirm` has to repeat the repository name
+// exactly. Repository names may contain slashes, so the comparison is on the
+// name as the caller sees it, not on a path segment.
+func harborRepoDelete(ctx context.Context, s *Session, params map[string]any) (any, error) {
+	project, err := requiredProject(params)
+	if err != nil {
+		return nil, err
+	}
+	repo, err := required(params, "repository")
+	if err != nil {
+		return nil, err
+	}
+	confirm := strings.TrimSpace(strParam(params, "confirm"))
+	if confirm != repo {
+		return nil, fmt.Errorf("to delete the repository, repeat its name exactly in `confirm` (got %q, expected %q)", confirm, repo)
+	}
+	if err := s.Harbor.DeleteRepository(ctx, project, repo); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"ok":      true,
+		"deleted": repo,
+		"message": "repository " + repo + " deleted; the registry reclaims its space at the next garbage collection",
+	}, nil
+}
+
+// harborProjectDelete removes a project.
+//
+// The `confirm` argument must repeat the project name exactly. That is not a
+// formality the view could do on its own behalf: the check lives here so a
+// mis-wired button, a script, or an assistant cannot delete a project by
+// sending the right id and nothing else. The interface asks for the same text —
+// the redundancy is the point, because the operation cannot be undone.
+func harborProjectDelete(ctx context.Context, s *Session, params map[string]any) (any, error) {
+	project, err := requiredProject(params)
+	if err != nil {
+		return nil, err
+	}
+	confirm := strings.TrimSpace(strParam(params, "confirm"))
+	if confirm != project {
+		return nil, fmt.Errorf("to delete the project, repeat its name exactly in `confirm` (got %q, expected %q)", confirm, project)
+	}
+	if err := s.Harbor.DeleteProject(ctx, project); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"ok":      true,
+		"deleted": project,
+		"message": "project " + project + " deleted; the registry reclaims its space at the next garbage collection",
+	}, nil
 }
 
 func harborProjectSetPublic(ctx context.Context, s *Session, params map[string]any) (any, error) {

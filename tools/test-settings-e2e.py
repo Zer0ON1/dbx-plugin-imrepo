@@ -857,6 +857,40 @@ def main() -> int:
         finally:
             os.environ.pop("FIXTURE_PING_ALIEN", None)
 
+        print("\nN3) deleting a project or repository needs the name typed in")
+        # The only two operations with no undo, so the confirmation is checked in
+        # the backend and not only in the view: a mis-wired button, a script or an
+        # assistant has to be unable to delete by sending an id and nothing else.
+        DELETES.clear()
+        reply = sc.call("harbor/projectDelete", {"connectionId": CONN, "project": PROJECT})
+        check("a project delete without the confirmation is refused",
+              "error" in reply and "confirm" in reply["error"]["message"], reply)
+        check("...and nothing was sent to the registry", DELETES == [], DELETES)
+
+        reply = sc.call("harbor/projectDelete", {"connectionId": CONN, "project": PROJECT, "confirm": "paym"})
+        check("a partial name is not a confirmation", "error" in reply, reply)
+        check("...still nothing sent", DELETES == [], DELETES)
+
+        reply = sc.call("harbor/projectDelete", {"connectionId": CONN, "project": PROJECT, "confirm": PROJECT})
+        check("the exact name deletes the project", "error" not in reply, reply)
+        check("...with a DELETE for that project",
+              any(m == "DELETE" and p.endswith("/projects/" + PROJECT) for m, p in REQUESTS), REQUESTS[-4:])
+
+        DELETES.clear()
+        reply = sc.call("harbor/repoDelete", {"connectionId": CONN, "project": PROJECT,
+                                              "repository": "tagged", "confirm": "tag"})
+        check("a partial repository name is refused", "error" in reply, reply)
+        check("...and nothing sent", DELETES == [], DELETES)
+
+        reply = sc.call("harbor/repoDelete", {"connectionId": CONN, "project": PROJECT,
+                                              "repository": "tagged", "confirm": "tagged"})
+        check("the exact repository name deletes it", "error" not in reply, reply)
+        check("...with a DELETE for that repository",
+              any(m == "DELETE" and "/repositories/" in p for m, p in REQUESTS), REQUESTS[-4:])
+        check("...double-encoded, so a nested name would resolve too",
+              any("%252F" in p or p.endswith("/repositories/tagged") for m, p in REQUESTS if m == "DELETE"),
+              [p for m, p in REQUESTS if m == "DELETE"])
+
         print("\nO) toggling a project public / private")
         detail = sc.result("harbor/projectAdmin", {"connectionId": CONN, "project": PROJECT})
         check("the current visibility is read", (detail.get("project") or {}).get("public") is False,

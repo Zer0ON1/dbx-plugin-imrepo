@@ -389,6 +389,79 @@ def main() -> int:
         check("the panel offers a fresh read and a trigger",
               "刷新报告" in dom and "触发扫描" in dom)
 
+        print("\nH4) deleting a repository needs its name typed in")
+        dom = browser.dom("theme=light&modaldel=1", 8000)
+        check("the delete-repository action is offered on a repository",
+              "btnRepoDelete" in dom and "danger-zone" in dom, "no delete-repository dialog")
+        check("the warning names the repository and carries counts",
+              "ledger-api" in dom and "danger-stats" in dom, "the warning is generic")
+        btn = re.search(r'<button[^>]*id="btnRepoDeleteConfirm"[^>]*>', dom)
+        check("delete is disabled before anything is typed",
+              btn is not None and "disabled" in btn.group(0), "delete starts enabled")
+
+        dom = browser.dom("theme=light&probe=1&modaldel=1&repodelete=ledger&repodeletego=1", 9000)
+        check("a name that only contains the repository keeps it disabled",
+              re.search(r'<button[^>]*id="btnRepoDeleteConfirm"[^>]*disabled', dom) is not None,
+              "a partial name enabled the button")
+        # startswith, not equality: the probe records the method with its
+        # repository ("harbor/repoDelete:ledger-api"), so membership against the
+        # list compares whole entries and never matches.
+        def sent(method):
+            return any(r.startswith(method) for r in probe_requests(dom))
+
+        check("...and nothing is sent", not sent("harbor/repoDelete"),
+              f"requests: {probe_requests(dom)[-5:]}")
+
+        dom = browser.dom("theme=light&probe=1&modaldel=1&repodelete=ledger-api&repodeletego=1", 9000)
+        check("the exact name sends the delete", sent("harbor/repoDelete"),
+              f"requests: {probe_requests(dom)[-5:]}")
+        # The repository is gone, so the workbench must leave the pane that was
+        # showing it and go back to the project view rather than keep rendering
+        # something that no longer exists.
+        reqs = probe_requests(dom)
+        after = reqs[reqs.index("harbor/repoDelete:ledger-api") + 1:] if "harbor/repoDelete:ledger-api" in reqs else []
+        check("...and the workbench returns to the project view",
+              any(r.startswith("harbor/repositories") or r.startswith("harbor/images") for r in after),
+              reqs[-6:])
+
+        print("\nH3) deleting a project needs the project name typed in")
+        # No undo and no soft delete: the repositories, artifacts and tags go
+        # with it. The gate is the typed name — a number in a dialog gets
+        # approved by reflex, a name has to be read — and the same check lives in
+        # the backend, so a mis-wired button cannot bypass it.
+        dom = browser.dom("theme=light&projectsettings=payments", 8000)
+        check("the project settings dialog has a danger zone",
+              "danger-zone" in dom and "危险操作" in dom, "no danger zone")
+        check("the warning carries real counts, not adjectives",
+              "danger-stats" in dom, "the warning has no counts")
+        btn = re.search(r'<button[^>]*id="btnProjectDelete"[^>]*>', dom)
+        check("delete is disabled before anything is typed",
+              btn is not None and "disabled" in btn.group(0), "delete starts enabled")
+        check("the input says what it wants", "输入项目名" in dom, "no confirmation hint")
+
+        # A wrong name: the gate holds and, more to the point, nothing is sent.
+        dom = browser.dom("theme=light&probe=1&projectsettings=payments&typedelete=wrong-name&deletedanger=1", 9000)
+        check("a name that is not the project keeps delete disabled",
+              re.search(r'<button[^>]*id="btnProjectDelete"[^>]*disabled', dom) is not None,
+              "a wrong name enabled the button")
+        # Read the probe, not the document: --dump-dom also serialises the
+        # inlined mock, which mentions the method name, so a substring check
+        # against the whole DOM answers yes no matter what was sent.
+        check("...and no delete request is sent for it",
+              "harbor/projectDelete" not in probe_requests(dom), f"requests: {probe_requests(dom)[-6:]}")
+
+        # The right name: the request goes out, carrying the confirmation.
+        dom = browser.dom("theme=light&probe=1&projectsettings=payments&typedelete=payments&deletedanger=1", 9000)
+        check("the exact name enables the button and sends the delete",
+              "harbor/projectDelete" in probe_requests(dom), f"requests: {probe_requests(dom)[-6:]}")
+        # The project is gone, so the tree must be re-read rather than left
+        # showing a project that no longer exists. bootstrap() asks for the
+        # project list; nothing before this point does.
+        reqs = probe_requests(dom)
+        after = reqs[reqs.index("harbor/projectDelete") + 1:] if "harbor/projectDelete" in reqs else []
+        check("...and the project list is re-read afterwards",
+              any(r.startswith("harbor/projects") for r in after), reqs[-6:])
+
         print("\nH2) a repository whose name contains a slash works like any other")
         # Harbor allows a nested repository name ("kylin/kylin-server-minimal"
         # inside project "payments"). Its API needs the slash double-encoded —

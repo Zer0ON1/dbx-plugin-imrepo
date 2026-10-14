@@ -241,5 +241,9 @@
     if (np) np.hidden = !harbor;
     const lg = IM.$("#btnLogs");
     if (lg) lg.hidden = !harbor;
+    // Deleting a repository needs Harbor (a v2 registry has no such endpoint)
+    // and a repository to point at.
+    const rd = IM.$("#btnRepoDelete");
+    if (rd) rd.hidden = !(harbor && IM.state.current.project && IM.state.current.repo);
   }
 })(window.IMREPO = window.IMREPO || {});

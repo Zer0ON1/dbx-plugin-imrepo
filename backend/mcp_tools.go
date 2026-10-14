@@ -112,7 +112,7 @@ func mcpListTags(ctx context.Context, s *Session, args map[string]any) (map[stri
 	if err != nil {
 		return nil, err
 	}
-	repo, err := repoArg(args)
+	repo, err := repoArg(args, project)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func mcpImageInfo(ctx context.Context, s *Session, args map[string]any) (map[str
 	if err != nil {
 		return nil, err
 	}
-	repo, err := repoArg(args)
+	repo, err := repoArg(args, project)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +245,7 @@ func mcpVulnerabilities(ctx context.Context, s *Session, args map[string]any) (m
 	if err != nil {
 		return nil, err
 	}
-	repo, err := repoArg(args)
+	repo, err := repoArg(args, project)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +301,7 @@ func mcpRetag(ctx context.Context, s *Session, args map[string]any) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	repo, err := repoArg(args)
+	repo, err := repoArg(args, project)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +335,7 @@ func mcpDeleteTag(ctx context.Context, s *Session, args map[string]any) (map[str
 	if err != nil {
 		return nil, err
 	}
-	repo, err := repoArg(args)
+	repo, err := repoArg(args, project)
 	if err != nil {
 		return nil, err
 	}
@@ -371,4 +371,58 @@ func mcpDeleteTag(ctx context.Context, s *Session, args map[string]any) (map[str
 		"project": project, "repository": repo, "deleted": tag, "digest": man.Digest, "ok": true,
 		"note": "OCI v2 deletes by digest, so any other tag pointing at this manifest was removed as well",
 	})
+}
+
+func mcpDeleteRepository(ctx context.Context, s *Session, args map[string]any) (map[string]any, error) {
+	project, err := projectArg(args)
+	if err != nil {
+		return nil, err
+	}
+	repo, err := repoArg(args, project)
+	if err != nil {
+		return nil, err
+	}
+	if s.RegistryType != registryTypeHarbor {
+		return nil, errors.New("deleting a whole repository needs Harbor's API; a plain OCI v2 registry has no repository-level delete endpoint — its tags have to go one at a time")
+	}
+
+	// The typed confirmation is checked by the handler, not re-implemented here:
+	// this calls the same function the workbench's delete dialog calls, so the
+	// gate that refuses a partial name is one gate, applied to both callers.
+	//
+	// `confirm` is shortened the same way `repository` was, so a confirmation
+	// written in the fully-qualified form confirms the same target — what is
+	// compared afterwards is still the exact name, and a shortened or
+	// misspelled one deletes nothing.
+	res, err := harborRepoDelete(ctx, s, map[string]any{
+		"project":    project,
+		"repository": repo,
+		"confirm":    shortRepoName(strings.TrimSpace(strParam(args, "confirm")), project),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return jsonResult(res)
+}
+
+func mcpDeleteProject(ctx context.Context, s *Session, args map[string]any) (map[string]any, error) {
+	project, err := projectArg(args)
+	if err != nil {
+		return nil, err
+	}
+	if s.RegistryType != registryTypeHarbor {
+		return nil, errors.New("projects are a Harbor concept; a plain OCI v2 registry has no project object to delete")
+	}
+
+	// As in mcpDeleteRepository: the confirmation gate belongs to the handler
+	// both paths share. A model that has to write the project name out cannot
+	// delete one by passing a flag — and neither can a mis-wired caller.
+	res, err := harborProjectDelete(ctx, s, map[string]any{
+		"project": project,
+		"confirm": strings.TrimSpace(strParam(args, "confirm")),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return jsonResult(res)
 }
