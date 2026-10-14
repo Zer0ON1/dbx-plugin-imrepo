@@ -27,10 +27,23 @@
   IM.shortDigest = (d) => (d && d.length > 24 ? d.slice(0, 24) + "…" : (d || "—"));
 
   /* ---------- modals & events ---------- */
+  /**
+   * Drops a leading "<project>/" from a repository name.
+   *
+   * Only the prefix: `String.replace(project + "/", "")` removes the first
+   * occurrence anywhere, which is the same thing for a well-formed name and the
+   * wrong thing for a name that merely contains the project string later on.
+   * Repository names may themselves contain slashes (Harbor allows nested
+   * repositories such as "kylin/kylin-server-minimal"), so prefix-only is the
+   * only correct reading.
+   */
+  IM.stripProjectPrefix = function stripProjectPrefix(name, project) {
+    const r = name || "";
+    return project && r.startsWith(project + "/") ? r.slice(project.length + 1) : r;
+  }
+
   IM.shortRepo = function shortRepo() {
-    const p = IM.state.current.project;
-    const r = IM.state.current.repo;
-    return p && r && r.startsWith(p + "/") ? r.slice(p.length + 1) : r;
+    return IM.stripProjectPrefix(IM.state.current.repo, IM.state.current.project);
   }
 
   /* ---------- pull commands ---------- */

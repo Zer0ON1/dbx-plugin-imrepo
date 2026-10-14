@@ -186,7 +186,7 @@ func (a *HarborArtifact) arches() []string {
 
 func (h *HarborClient) Artifacts(ctx context.Context, project, repo string) ([]HarborArtifact, error) {
 	p := url.PathEscape(project)
-	r := url.PathEscape(repo)
+	r := escapeRepo(repo)
 	data, code, err := h.do(ctx, http.MethodGet, "/api/v2.0/projects/"+p+"/repositories/"+r+"/artifacts?page=1&page_size=100&with_tag=true")
 	if err != nil {
 		return nil, err
@@ -249,6 +249,21 @@ func mgmtErr(what string, code int, data []byte, err error) error {
 		return fmt.Errorf("%s failed (401 unauthorized): Harbor rejected the connection credentials — run Settings → Connection diagnostics to pinpoint the cause (wrong username/password, a \"No Authentication\" connection, or a non-admin account)", what)
 	}
 	return fmt.Errorf("%s failed (%d): %s", what, code, truncate(string(data), 200))
+}
+
+// escapeRepo encodes a Harbor repository name for use inside an API path.
+//
+// Twice, not once. Harbor's router decodes the path before matching, so a single
+// %2F arrives as a real slash and the route stops matching: a repository named
+// "kylin/kylin-server-minimal" has to be sent as %252F, which the router turns
+// back into %2F and the handler into a slash. Measured against a live Harbor —
+// %2F answers 404, %252F answers 200.
+//
+// A name without a slash is unaffected either way, which is why one escape went
+// unnoticed: only repositories that are nested break, and they are the ones a
+// flat project listing hides.
+func escapeRepo(repo string) string {
+	return url.PathEscape(url.PathEscape(repo))
 }
 
 // artifactPages fetches each repository's artifacts concurrently, bounded by
@@ -495,7 +510,7 @@ func isDeletableArtifactType(t string) bool {
 // live image, so every delete is gated on this fresh read.
 func (h *HarborClient) Artifact(ctx context.Context, project, repo, reference string) (*HarborArtifact, error) {
 	p := url.PathEscape(project)
-	r := url.PathEscape(repo)
+	r := escapeRepo(repo)
 	a := url.PathEscape(reference)
 	data, code, err := h.do(ctx, http.MethodGet,
 		"/api/v2.0/projects/"+p+"/repositories/"+r+"/artifacts/"+a+"?with_tag=true")
@@ -517,7 +532,7 @@ func (h *HarborClient) Artifact(ctx context.Context, project, repo, reference st
 
 func (h *HarborClient) DeleteTag(ctx context.Context, project, repo, reference, tag string) error {
 	p := url.PathEscape(project)
-	r := url.PathEscape(repo)
+	r := escapeRepo(repo)
 	a := url.PathEscape(reference)
 	t := url.PathEscape(tag)
 	data, code, err := h.do(ctx, http.MethodDelete, "/api/v2.0/projects/"+p+"/repositories/"+r+"/artifacts/"+a+"/tags/"+t)
@@ -532,7 +547,7 @@ func (h *HarborClient) DeleteTag(ctx context.Context, project, repo, reference, 
 
 func (h *HarborClient) DeleteArtifact(ctx context.Context, project, repo, reference string) error {
 	p := url.PathEscape(project)
-	r := url.PathEscape(repo)
+	r := escapeRepo(repo)
 	a := url.PathEscape(reference)
 	data, code, err := h.do(ctx, http.MethodDelete, "/api/v2.0/projects/"+p+"/repositories/"+r+"/artifacts/"+a)
 	if err != nil {
@@ -547,7 +562,7 @@ func (h *HarborClient) DeleteArtifact(ctx context.Context, project, repo, refere
 // Vulnerabilities returns the raw vulnerability report JSON (Trivy / Harbor format).
 func (h *HarborClient) Vulnerabilities(ctx context.Context, project, repo, reference string) (json.RawMessage, error) {
 	p := url.PathEscape(project)
-	r := url.PathEscape(repo)
+	r := escapeRepo(repo)
 	a := url.PathEscape(reference)
 	data, code, err := h.do(ctx, http.MethodGet, "/api/v2.0/projects/"+p+"/repositories/"+r+"/artifacts/"+a+"/additions/vulnerabilities")
 	if err != nil {
@@ -867,7 +882,7 @@ func aggregateRepositories(images []ProjectImage, repos []HarborRepository) []Pr
 // TriggerScan asks Harbor to scan (or rescan) one artifact.
 func (h *HarborClient) TriggerScan(ctx context.Context, project, repo, reference string) error {
 	p := url.PathEscape(project)
-	r := url.PathEscape(repo)
+	r := escapeRepo(repo)
 	a := url.PathEscape(reference)
 	data, code, err := h.doBody(ctx, http.MethodPost,
 		"/api/v2.0/projects/"+p+"/repositories/"+r+"/artifacts/"+a+"/scan",

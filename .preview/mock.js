@@ -88,6 +88,11 @@
     { name: "ddf", repo_count: 6 }, { name: "sandbox", repo_count: 2 },
   ];
   const REPOS = [
+    // A nested repository: Harbor allows the name within a project to contain
+    // slashes, and both the listing and every artifact call have to survive it.
+    // It broke for real — the Harbor API needs the slash double-encoded (%252F,
+    // not %2F), which no flat fixture could show.
+    { name: "kylin/kylin-server-minimal", full_name: "payments/kylin/kylin-server-minimal", artifact_count: 2 },
     { name: "ledger-api", full_name: "payments/ledger-api", artifact_count: 5 },
     { name: "settlement-api", full_name: "payments/settlement-api", artifact_count: 4 },
     { name: "docs-api", full_name: "payments/docs-api", artifact_count: 7 },
@@ -453,12 +458,15 @@
           await new Promise((r) => setTimeout(r, slowMs));
         }
         // Tags are prefixed with the repository name so a test can tell whose
-        // listing is on screen.
+        // listing is on screen — but with the LAST path segment only, because a
+        // real tag cannot contain a slash and a nested repository should not
+        // produce a fixture that could never exist.
+        const leaf = name.split("/").pop();
         return [0, 1, 2].map((i) => ({
           digest: ("sha256:" + name + i).padEnd(24, "0"),
           size: (100 + i) * 1024 * 1024,
           push_time: "2026-09-22T14:18:36Z",
-          tags: [{ name: `${name}-${i + 1}` }],
+          tags: [{ name: `${leaf}-${i + 1}` }],
           // The backend computes `arches` from the references below and sends
           // both — the tag table reads `arches`. This fixture used to carry only
           // the raw references, exactly as the backend did, which is why the
@@ -616,6 +624,11 @@
       // inside the project, so a collapsed tree hid it completely.
       setTimeout(() => byText("payments")?.click(), 1400);   // collapse
       setTimeout(() => document.querySelector("#contentBody .repo-link")?.click(), 2200);
+    }
+    if (params.get("nested")) {
+      // Open the repository whose name contains a slash, which is the case the
+      // double-encoding exists for.
+      setTimeout(() => byText("kylin/kylin-server-minimal", "lvl2")?.click(), 900);
     }
     const clickRepo = params.get("clickrepo");
     if (clickRepo) {

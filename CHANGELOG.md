@@ -4,6 +4,26 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
+## Unreleased
+
+**Repositories whose name contains a slash could not be opened.** Harbor allows a
+repository inside a project to be nested — `kylin/kylin-server-minimal` in project
+`multi-arch` — and its API needs the slash **double**-encoded: the router decodes
+the path before matching, so `%2F` arrives as a real slash and the route stops
+matching, while `%252F` survives as the parameter. Measured against a live
+Harbor: `%2F` answers 404, `%252F` answers 200. Every artifact, tag, delete and
+scan call carries a repository name, so all of them were affected.
+
+Only nested names broke, which is why a flat fixture never showed it: a name
+without a slash escapes to itself either way. The mock now carries a nested
+repository, and the UI suite opens it.
+
+**Stripping the project prefix used a substring replace.** `String.replace(p + "/",
+"")` removes the first occurrence *anywhere*, which is the same thing for a
+well-formed name and the wrong thing for one that merely contains the project
+string later. Both call sites now drop a leading prefix only — which matters
+precisely because names may contain slashes.
+
 ## 0.1.7
 
 **The AI path skipped the registry-type detection.** Reported from use: with the

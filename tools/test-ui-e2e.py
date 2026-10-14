@@ -389,6 +389,27 @@ def main() -> int:
         check("the panel offers a fresh read and a trigger",
               "刷新报告" in dom and "触发扫描" in dom)
 
+        print("\nH2) a repository whose name contains a slash works like any other")
+        # Harbor allows a nested repository name ("kylin/kylin-server-minimal"
+        # inside project "payments"). Its API needs the slash double-encoded —
+        # %252F, not %2F — because the router decodes the path before matching,
+        # and a single escape arrives as a real slash and 404s. Only the nested
+        # case breaks, which is why a flat fixture never caught it.
+        dom = browser.dom("theme=light&nested=1", 7000)
+        check("the nested repository is listed in the tree",
+              "kylin/kylin-server-minimal" in dom, "nested repository missing from the tree")
+        tree = re.search(r'id="tree"(.*?)</nav>', dom, re.S)
+        check("...as a single row, not split at the slash",
+              tree is not None and tree.group(1).count("kylin/kylin-server-minimal") >= 1
+              and "</span>" in tree.group(1), "the row was split")
+        body = re.search(r'id="contentBody">(.*?)</main>', dom, re.S)
+        seg = body.group(1) if body else ""
+        check("its artifacts load instead of a 404",
+              "kylin-server-minimal-1" in seg and "404" not in seg,
+              "the nested repository's artifacts did not render")
+        check("the breadcrumb names it whole",
+              "kylin/kylin-server-minimal" in dom, "breadcrumb lost the nested name")
+
         print("\nI) clicking a project folder shows the project-wide image overview")
         dom = browser.dom("theme=light&overview=1", 6000)
         check("the four totals are shown",

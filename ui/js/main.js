@@ -207,7 +207,7 @@
       try {
         if (IM.state.mode === "harbor" && IM.pendingDelete.reference) {
           const project = IM.state.current.project;
-          const short = IM.pendingDelete.repo.replace(project + "/", "");
+          const short = IM.stripProjectPrefix(IM.pendingDelete.repo, project);
           await IM.invoke("harbor/deleteTag", { project, repository: short, reference: IM.pendingDelete.reference, tag: IM.pendingDelete.tag });
         } else {
           // Resolve digest, then OCI delete.
