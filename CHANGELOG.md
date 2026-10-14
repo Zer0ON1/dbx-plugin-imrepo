@@ -4,7 +4,7 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
-## Unreleased
+## 0.1.8
 
 **The new-project button reads as a button.** It was a 20px glyph with no
 border — the smallest target in the sidebar and the least obvious. Now 28px with
