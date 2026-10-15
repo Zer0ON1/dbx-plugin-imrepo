@@ -4,7 +4,7 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
-## Unreleased
+## 0.1.81
 
 **Deleting a repository or a whole project.** Harbor has always allowed both,
 and the workbench offered neither — which left the platform's own web UI as the
