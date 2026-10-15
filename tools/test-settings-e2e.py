@@ -1133,22 +1133,35 @@ def main() -> int:
         sc2.connect(username="admin")
         check("credentials land in the data dir",
               (data_dir / "credentials.json").exists(), sorted(p.name for p in data_dir.iterdir()))
-        check("...and nothing is written to the per-user config dir instead",
-              not (fresh_cfg / "imrepo-dbx-plugin").exists(),
-              list(fresh_cfg.iterdir()))
+        # rglob over the whole tree, not one hand-built layout: os.UserConfigDir()
+        # is %AppData% on Windows, $HOME/Library/Application Support on macOS and
+        # $XDG_CONFIG_HOME (else ~/.config) elsewhere, so "nothing was written to
+        # the fallback" can only be asked of every candidate location at once.
+        stray = sorted(str(p) for p in fresh_cfg.rglob("settings.json")) \
+              + sorted(str(p) for p in fresh_cfg.rglob("credentials.json"))
+        check("...and nothing is written under the per-user config dir instead",
+              not stray, stray)
         sc2.close()
 
         # An install from before this change: files in the per-user config dir,
-        # nothing in the data dir yet.
+        # nothing in the data dir yet. They are written by launching the
+        # *fallback* path and asking it where it wrote — not by rebuilding the
+        # platform's layout here. A hand-built path is right on at most two of
+        # the three platforms, and this suite runs on all three; the previous
+        # version of this section got macOS wrong for exactly that reason.
         legacy_cfg = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-legacy-cfg-"))
-        legacy_dir = legacy_cfg / "imrepo-dbx-plugin"
-        legacy_dir.mkdir()
-        secret = _b64u.b64encode(b"legacy-pass").decode()
-        (legacy_dir / "settings.json").write_text(json.dumps(
-            {"version": 1, "connections": {CONN: settings_payload(retention={"keepTagged": 3})}}),
-            encoding="utf-8")
-        (legacy_dir / "credentials.json").write_text(json.dumps(
-            {"version": 1, "secrets": {CONN: secret}}), encoding="utf-8")
+        sc_legacy = Sidecar(exe, legacy_cfg)   # no DBX_PLUGIN_DATA_DIR: the old path
+        sc_legacy.result("settings/set", {"connectionId": CONN,
+                                          "settings": settings_payload(retention={"keepTagged": 3})})
+        sc_legacy.connect(username="admin")
+        legacy_settings = pathlib.Path(str((sc_legacy.result("app/info", {})).get("settingsPath") or ""))
+        legacy_dir = legacy_settings.parent
+        check("without the host's data dir the plugin still uses the old location",
+              legacy_settings.name == "settings.json"
+              and (legacy_dir / "settings.json").exists()
+              and (legacy_dir / "credentials.json").exists(), legacy_dir)
+        secret = _b64u.b64encode(b"fixture-pass").decode()
+        sc_legacy.close()
 
         moved_dir = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-plugin-data-")) / "plugin-data" / manifest["id"]
         sc3 = Sidecar(exe, legacy_cfg, data_dir=moved_dir)
