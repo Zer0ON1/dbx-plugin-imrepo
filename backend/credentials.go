@@ -20,8 +20,8 @@ import (
 // To make admin features survive that, the last password seen for a connection
 // is remembered sidecar-side, mirroring what `docker login` already does in
 // ~/.docker/config.json. It is stored base64-encoded (obfuscation, not
-// encryption) in the user's private config dir, per the same threat model as
-// the Docker CLI on a single-user workstation.
+// encryption) in the plugin's private data directory (see plugindir.go), per
+// the same threat model as the Docker CLI on a single-user workstation.
 // ---------------------------------------------------------------------------
 
 type credentialStore struct {
@@ -35,11 +35,11 @@ var (
 )
 
 func credentialPath() string {
-	dir, err := os.UserConfigDir()
+	dir, err := pluginConfigDir()
 	if err != nil || dir == "" {
 		return ""
 	}
-	return filepath.Join(dir, "imrepo-dbx-plugin", "credentials.json")
+	return filepath.Join(dir, "credentials.json")
 }
 
 func loadCredentials() *credentialStore {

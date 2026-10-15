@@ -139,9 +139,14 @@ def isolated_env() -> dict:
     Go's os.UserConfigDir() reads %AppData% on Windows and $XDG_CONFIG_HOME
     (else ~/.config) elsewhere, so both are set. HOME is redirected too because
     the fallback path must not reach the real one.
+
+    DBX_PLUGIN_DATA_DIR is *removed* rather than redirected: the plugin prefers
+    it when set, so inheriting a value from whoever runs the suite would point
+    the sidecar at a real DBX data directory instead of the temp one. Tests that
+    exercise that path set it themselves.
     """
     cfg = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-cfg-"))
-    return dict(
+    env = dict(
         os.environ,
         APPDATA=str(cfg),
         LOCALAPPDATA=str(cfg),
@@ -149,6 +154,8 @@ def isolated_env() -> dict:
         XDG_CONFIG_HOME=str(cfg),
         HOME=str(cfg),
     )
+    env.pop("DBX_PLUGIN_DATA_DIR", None)
+    return env
 
 
 _HEADLESS_SHELL_NAMES = ("chrome-headless-shell",)

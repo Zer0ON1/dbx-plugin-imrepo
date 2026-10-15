@@ -350,11 +350,15 @@ class Server(socketserver.ThreadingTCPServer):
 class Sidecar:
     """One sidecar process. Relaunching it is how persistence is proved."""
 
-    def __init__(self, exe: pathlib.Path, cfg: pathlib.Path):
+    def __init__(self, exe: pathlib.Path, cfg: pathlib.Path, data_dir: pathlib.Path | None = None):
         # cfg is the config dir the sidecar must use; _harness sets every env var
         # Go's os.UserConfigDir() consults, on Windows and elsewhere.
         env = dict(_harness.isolated_env(), XDG_CONFIG_HOME=str(cfg), APPDATA=str(cfg),
                    LOCALAPPDATA=str(cfg), USERPROFILE=str(cfg), HOME=str(cfg))
+        if data_dir is not None:
+            # What a real host passes; the plugin prefers it over every env var
+            # above, and migrates whatever it finds in the old location into it.
+            env["DBX_PLUGIN_DATA_DIR"] = str(data_dir)
         self.proc = subprocess.Popen(
             [str(exe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, encoding="utf-8", bufsize=1, env=env,
@@ -1106,6 +1110,81 @@ def main() -> int:
         single = sc.result("harbor/artifacts", {"connectionId": CONN, "project": PROJECT, "repository": "legacy-svc"})
         check("an artifact with no platform information reports none, not a guess",
               (single[0].get("arches") or []) == [], single[0].get("arches"))
+
+        print("\nU) the plugin data dir follows the host, and the old location migrates")
+        # DBX hands every sidecar a DBX_PLUGIN_DATA_DIR — the documented place for
+        # anything the plugin writes. In a container deployment it sits inside the
+        # data volume, so migrating the deployment by keeping the volume keeps the
+        # settings, while the per-user config dir earlier versions used is carried
+        # by no migration. The host does not pre-create the directory, either.
+        import base64 as _b64u
+        fresh_cfg = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-cfg-"))
+        data_dir = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-plugin-data-")) / "plugin-data" / manifest["id"]
+        sc2 = Sidecar(exe, fresh_cfg, data_dir=data_dir)
+        info2 = sc2.result("app/info", {})
+        check("the settings path is inside the host-provided data dir",
+              str(data_dir) in (info2.get("settingsPath") or ""), info2.get("settingsPath"))
+        check("reading a path does not create anything yet",
+              not data_dir.exists(), data_dir)
+        sc2.result("settings/set", {"connectionId": CONN, "settings": settings_payload()})
+        check("the plugin creates the data dir the host did not, on first save",
+              data_dir.is_dir() and (data_dir / "settings.json").exists(),
+              sorted(p.name for p in data_dir.iterdir()) if data_dir.exists() else "no data dir")
+        sc2.connect(username="admin")
+        check("credentials land in the data dir",
+              (data_dir / "credentials.json").exists(), sorted(p.name for p in data_dir.iterdir()))
+        check("...and nothing is written to the per-user config dir instead",
+              not (fresh_cfg / "imrepo-dbx-plugin").exists(),
+              list(fresh_cfg.iterdir()))
+        sc2.close()
+
+        # An install from before this change: files in the per-user config dir,
+        # nothing in the data dir yet.
+        legacy_cfg = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-legacy-cfg-"))
+        legacy_dir = legacy_cfg / "imrepo-dbx-plugin"
+        legacy_dir.mkdir()
+        secret = _b64u.b64encode(b"legacy-pass").decode()
+        (legacy_dir / "settings.json").write_text(json.dumps(
+            {"version": 1, "connections": {CONN: settings_payload(retention={"keepTagged": 3})}}),
+            encoding="utf-8")
+        (legacy_dir / "credentials.json").write_text(json.dumps(
+            {"version": 1, "secrets": {CONN: secret}}), encoding="utf-8")
+
+        moved_dir = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-plugin-data-")) / "plugin-data" / manifest["id"]
+        sc3 = Sidecar(exe, legacy_cfg, data_dir=moved_dir)
+        sc3.result("app/info", {})   # first config read triggers the migration
+        got3 = sc3.result("settings/get", {"connectionId": CONN})
+        check("a file from the old location is copied into the data dir",
+              (moved_dir / "settings.json").exists(),
+              sorted(p.name for p in moved_dir.iterdir()) if moved_dir.exists() else "no data dir")
+        check("...and is what the plugin then reads",
+              ((got3.get("settings") or {}).get("retention") or {}).get("keepTagged") == 3,
+              (got3.get("settings") or {}).get("retention"))
+        migrated_creds = (moved_dir / "credentials.json")
+        check("...the remembered password is copied too",
+              migrated_creds.exists()
+              and (json.loads(migrated_creds.read_text(encoding="utf-8")).get("secrets") or {}).get(CONN) == secret,
+              migrated_creds.exists())
+        check("...the old files are left in place (another host may still read them)",
+              (legacy_dir / "settings.json").exists() and (legacy_dir / "credentials.json").exists(),
+              sorted(p.name for p in legacy_dir.iterdir()))
+        sc3.close()
+
+        # A destination that already holds a file is never overwritten — a re-run
+        # of the migration must not undo a newer copy — while a missing one is
+        # still copied in, file by file.
+        keep_dir = pathlib.Path(tempfile.mkdtemp(prefix="imrepo-plugin-data-")) / "plugin-data" / manifest["id"]
+        keep_dir.mkdir(parents=True)
+        (keep_dir / "settings.json").write_text(json.dumps({"version": 1, "connections": {}}),
+                                                encoding="utf-8")
+        sc4 = Sidecar(exe, legacy_cfg, data_dir=keep_dir)
+        sc4.result("app/info", {})
+        kept = json.loads((keep_dir / "settings.json").read_text(encoding="utf-8"))
+        check("an existing file in the data dir is not overwritten by the migration",
+              kept.get("connections") == {}, kept)
+        check("...but a missing one is still copied in",
+              (keep_dir / "credentials.json").exists(), sorted(p.name for p in keep_dir.iterdir()))
+        sc4.close()
 
         sc.close()
     finally:

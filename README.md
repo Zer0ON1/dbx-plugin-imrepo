@@ -85,13 +85,16 @@ REST API 的功能只在 Harbor 上出现。**界面上不可用的按钮会置�
 
 ### 连接凭据的本地缓存
 
-插件会把**最后一次使用的连接密码**缓存在本地：
+插件会把**最后一次使用的连接密码**缓存在本地，位置优先跟随 DBX 宿主给出的插件数据目录
+（`DBX_PLUGIN_DATA_DIR`，与插件的 `settings.json` 同一目录）：
 
-| 平台 | 路径 |
+| 部署方式 | 路径 |
 |---|---|
-| Windows | `%AppData%\imrepo-dbx-plugin\credentials.json` |
-| macOS | `~/Library/Application Support/imrepo-dbx-plugin/credentials.json` |
-| Linux | `~/.config/imrepo-dbx-plugin/credentials.json`（或 `$XDG_CONFIG_HOME` 下同名路径） |
+| 宿主提供了插件数据目录（Docker / dbx-web 与新版桌面端都会提供） | `$DBX_PLUGIN_DATA_DIR/credentials.json` —— 该目录在 **Docker / dbx-web 下位于 DBX 数据目录内**，因此备份/迁移数据目录（官方推荐的迁移方式）时凭据与设置**一并保留** |
+| 宿主未提供（旧版本宿主、独立运行） | Windows `%AppData%\imrepo-dbx-plugin\`；macOS `~/Library/Application Support/imrepo-dbx-plugin/`；Linux `~/.config/imrepo-dbx-plugin/`（或 `$XDG_CONFIG_HOME` 下同名路径） |
+
+首次在提供数据目录的宿主上启动时，旧位置已有的 `settings.json` / `credentials.json` 会**复制**
+（不是移动）到新位置：新位置已有同名文件则不覆盖，旧文件保留在原处。
 
 文件权限为 `0600`（仅属主可读），但 **base64 是编码，不是加密**——能读取该文件的本地进程或
 用户即可还原出密码。这与 `~/.docker/config.json` 的威胁模型相同。

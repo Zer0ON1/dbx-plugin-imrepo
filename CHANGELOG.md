@@ -31,6 +31,21 @@ argument helper cut at the last slash, turning a nested repository into a
 different, non-existent one. It now drops the project prefix only, which is
 what the workbench has done since 0.1.8.
 
+**Settings and remembered passwords now live where DBX says they should.** The
+plugin wrote both to the per-user config directory (`~/.config/imrepo-dbx-plugin`
+on Linux). That location is invisible to a deployment migration: the documented
+way to move a Docker or dbx-web install is to keep its data directory, and the
+config directory is not part of it — so the plugin came back with no settings
+and no credentials after a machine move.
+
+Both files now go to `DBX_PLUGIN_DATA_DIR`, the directory the host reserves for
+this plugin — the plugin docs name it as the place for anything a sidecar
+writes, and it sits inside DBX's data directory. A host that sets nothing (an
+older DBX, or a sidecar launched outside one) keeps the old location. Files
+already written there are copied forward once, file by file: an existing copy
+at the destination is never overwritten and the source files are left in place,
+so an install moving between hosts does not lose its settings to the upgrade.
+
 ## 0.1.8
 
 **The new-project button reads as a button.** It was a 20px glyph with no

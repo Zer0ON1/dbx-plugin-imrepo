@@ -114,11 +114,11 @@ func defaultSettings() Settings {
 
 // settingsPath is the JSON file backing the settings, created on first save.
 func settingsPath() (string, error) {
-	dir, err := os.UserConfigDir()
-	if err != nil || dir == "" {
-		return "", fmt.Errorf("cannot locate a user config directory: %v", err)
+	dir, err := pluginConfigDir()
+	if err != nil {
+		return "", err
 	}
-	return filepath.Join(dir, "imrepo-dbx-plugin", "settings.json"), nil
+	return filepath.Join(dir, "settings.json"), nil
 }
 
 func loadStore() *settingsStore {
