@@ -513,6 +513,43 @@ def main() -> int:
         check("the repository name is a way into the repository view", "repo-link" in seg,
               "no clickable repository link")
 
+        print("\nI2) the search box finds repositories, not only projects")
+        # Issue #2: typing a repository name emptied the tree. The filter
+        # compared only project names, while the sidebar advertises "search
+        # repos / projects" — a repository inside a project whose name does not
+        # match has to appear too.
+        def tree_of(html):
+            m = re.search(r'id="tree"(.*?)</nav>', html, re.S)
+            return m.group(1) if m else ""
+
+        dom = browser.dom("theme=light&search=ledger", 9000)
+        tree = tree_of(dom)
+        check("a repository name that matches no project finds the repository",
+              "ledger-api" in tree, tree[:400])
+        check("...inside the project that owns it", "payments" in tree, tree[:400])
+        check("...and non-matching projects are filtered out", "checkout" not in tree, tree[:400])
+
+        dom = browser.dom("theme=light&search=payments", 9000)
+        tree = tree_of(dom)
+        check("a project name still matches, with its repositories",
+              "payments" in tree and "ledger-api" in tree, tree[:400])
+        check("...and still excludes other projects", "checkout" not in tree, tree[:400])
+
+        dom = browser.dom("theme=light&search=no-such-thing-anywhere", 9000)
+        tree = tree_of(dom)
+        check("a search with no match says so", "暂无数据" in tree or "No data" in tree, tree[:300])
+
+        dom = browser.dom("theme=light&mode=docker&search=app", 9000)
+        tree = tree_of(dom)
+        check("the v2 namespace tree is searched too",
+              "team-alpha" in tree and ">app<" in tree, tree[:400])
+        check("...and a non-matching namespace is dropped", "team-beta" not in tree, tree[:400])
+
+        dom = browser.dom("theme=light&mode=docker&search=team-alpha/app", 9000)
+        tree = tree_of(dom)
+        check("a fully-qualified repository name matches too",
+              "team-alpha" in tree and ">app<" in tree, tree[:400])
+
         print("\nJ) a v2 tag table lazily shows each tag's architectures")
         dom = browser.dom("theme=light&mode=docker", 8000)
         check("the tag table opens under a namespace",

@@ -83,6 +83,15 @@
     IM.state.tags = [];
     IM.state.sidebarTab = "projects";
     IM.state.loadingKeys.clear();
+    // The search described the registry we just left; carrying it (or its index)
+    // into the next one would filter the new tree by a name from the old one.
+    IM.state.search = "";
+    IM.state.searchRepos = {};
+    IM.state.searchIndexMode = "";
+    IM.state.searchIndexConn = null;
+    IM.state.searchLoading = false;
+    const searchInput = IM.$("#searchInput");
+    if (searchInput) searchInput.value = "";
     IM.setCrumbs([]);
 
     const body = IM.$("#contentBody");
@@ -170,7 +179,15 @@
     IM.$("#btnCreateProjectConfirm").addEventListener("click", IM.submitCreateProject);
     IM.$("#btnCleanup").addEventListener("click", IM.openCleanup);
     IM.$("#btnCleanupConfirm").addEventListener("click", IM.runCleanup);
-    IM.$("#searchInput").addEventListener("input", (e) => { IM.state.search = e.target.value; IM.renderSidebar(); });
+    let searchTimer = null;
+    IM.$("#searchInput").addEventListener("input", (e) => {
+      IM.state.search = e.target.value;
+      IM.renderSidebar();
+      // The index is per connection, not per keystroke: without the delay every
+      // character would start another sweep over the project list.
+      clearTimeout(searchTimer);
+      if (IM.state.search.trim()) searchTimer = setTimeout(() => IM.ensureSearchIndex(), 200);
+    });
 
     IM.$("#btnRetagConfirm").addEventListener("click", async () => {
       const repo = IM.$("#retagRepo").value;

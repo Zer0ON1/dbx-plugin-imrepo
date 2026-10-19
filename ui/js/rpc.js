@@ -37,6 +37,13 @@
   IM.invalidate = function invalidate(key) {
     if (key) IM.state.cache.delete(key);
     else IM.state.cache.clear();
+    // The search index is a snapshot of every project's repository listing; a
+    // mutation (delete, rename, cleanup) can date it. Dropping it costs one
+    // cached listing per project on the next search, and a cached listing that
+    // has just been invalidated is re-read.
+    IM.state.searchRepos = {};
+    IM.state.searchIndexMode = "";
+    IM.state.searchIndexConn = null;
   }
 
   /**

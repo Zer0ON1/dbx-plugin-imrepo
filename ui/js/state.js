@@ -13,6 +13,15 @@
     connInfo: { name: "", endpoint: "", type: "" },
     mode: "docker-v2", // "harbor" | "docker-v2"
     search: "",
+    /* The search box filters projects AND repositories. Repository rows are
+     * loaded per project on demand, so a repository inside a project the user
+     * never expanded is invisible to a name filter; while a search is active
+     * the index below is filled with one listing per project. It is a snapshot
+     * of one connection: invalidate() and a connection switch clear it. */
+    searchRepos: {},          // project name -> [repository row]
+    searchIndexMode: "",
+    searchIndexConn: null,
+    searchLoading: false,
     sidebarTab: "projects", // "projects" | "overview" (left-sidebar tabs)
     projects: [],
     repos: [], // repos of the currently selected project (harbor) OR catalog (docker-v2)

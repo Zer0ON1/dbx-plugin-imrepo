@@ -559,6 +559,16 @@
         return { settings: JSON.parse(JSON.stringify(saved)), connectionId: "preview-conn",
                  message: "Settings reset to defaults" };
       }
+      if (method === "harbor/repositories") {
+        // Per project, like the real API: the tree asks for the project it
+        // expands, and the search index asks for every project in turn.
+        // Answering with the whole fixture for every project would make a
+        // search match the same repository under every folder.
+        const project = (p && p.project) || "";
+        return REPOS
+          .filter((r) => String(r.full_name || "").startsWith(project + "/"))
+          .map((r) => JSON.parse(JSON.stringify(r)));
+      }
       // v2 namespace browsing: repository list and namespace overview derive from
       // the RPC's namespace argument (the URL query `namespace` is unrelated).
       if (method === "registry/repositories") {
@@ -601,7 +611,14 @@
     .find((n) => n.textContent.includes(text));
 
   window.addEventListener("load", () => {
-    if (mode === "docker") {
+    // A search test drives the tree through the search box; the default drill
+    // into payments (or the first namespace) would pre-expand a project and
+    // make "the search found this repository" indistinguishable from "the mock
+    // opened it".
+    const drivingSearch = params.get("search") !== null;
+    if (drivingSearch) {
+      // nothing: the ?search= driver below types into the box
+    } else if (mode === "docker") {
       // docker-v2 tree: namespaces are folders. Open the first namespace, then
       // its first repository (poll — the repo row appears once the namespace's
       // listing resolves). ?overview=1 keeps the namespace selected instead.
@@ -694,6 +711,18 @@
         else setTimeout(again, 100);
       };
       setTimeout(again, 600);
+    }
+    const searchText = params.get("search");
+    if (searchText !== null) {
+      // Type into the sidebar search once bootstrap has rendered the tree. The
+      // input handler debounces the repository index build; the headless dump's
+      // virtual time budget covers both steps.
+      setTimeout(() => {
+        const input = document.getElementById("searchInput");
+        if (!input) return;
+        input.value = searchText;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }, 1200);
     }
     if (params.get("projectsettings")) {
       // Open the per-folder settings dialog. ?projectsettings=1 takes the first

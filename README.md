@@ -39,7 +39,7 @@ CI 另在 ubuntu / windows / macos 三个真实 runner 上各自跑一遍完整�
 |------|------|
 | 连接与预设 | Harbor / Registry v2 / Docker Hub / GHCR / Aliyun ACR / Tencent TCR / AWS ECR / Azure ACR / Nexus / Artifactory / Quay |
 | 多元认证 | Basic/密码、Harbor Robot、Bearer/PAT、云厂商 AK/SK（AWS SigV4、Aliyun HMAC-SHA1、Tencent TC3）、免认证 |
-| 仓库浏览 | Harbor 项目树 / 通用 `_catalog` 列表 / **V2 命名空间树**（V2 无项目对象，按仓库名首段归类），模糊搜索 |
+| 仓库浏览 | Harbor 项目树 / 通用 `_catalog` 列表 / **V2 命名空间树**（V2 无项目对象，按仓库名首段归类），**模糊搜索同时匹配项目与仓库**（匹配的仓库会自动带出其所属项目） |
 | 项目与镜像总览 | 点项目「文件夹」即列出该项目**跨仓库聚合**的全部镜像：镜像数/总大小/仓库数/Tag 数 + 按推送时间降序的列表 |
 | **总览页签与图表** | 统计卡 + SVG 横向柱状图（Harbor：拉取最多的项目、项目存储分布；V2：命名空间存储分布） |
 | **架构结构展示** | 多架构镜像按平台逐个展示为**一个圆圈徽章**（`linux/amd64`、`linux/arm64`…），V2 侧懒加载回填 |

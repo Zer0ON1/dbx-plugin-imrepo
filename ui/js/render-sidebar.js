@@ -32,13 +32,43 @@
     const tree = IM.$("#tree");
     tree.innerHTML = "";
     const q = IM.state.search.trim().toLowerCase();
+    const index = IM.state.searchRepos || {};
+
+    // What this project contributes to the filtered view. Without a query every
+    // project is shown as it is. With one, a project qualifies by its own name,
+    // and otherwise only through the repositories that match — the box
+    // advertises "search repos / projects", but the filter used to look at
+    // project names alone, so a repository search emptied the tree (issue #2).
+    const repoMatches = (r) =>
+      String(r.name || "").toLowerCase().includes(q)
+      || String(r.full_name || "").toLowerCase().includes(q);
+    const match = (p) => {
+      if (!q) return { project: true, repos: [] };
+      const projectMatch = p.name.toLowerCase().includes(q);
+      const all = index[p.name] || [];
+      return {
+        project: projectMatch,
+        // A matching project keeps all of its repositories (that is what the
+        // tree shows for a project the user never expanded); a project pulled
+        // in by a repository shows only the matching rows.
+        repos: projectMatch ? all : all.filter(repoMatches),
+      };
+    };
 
     // Both modes browse a folder-first project tree. Harbor projects come from
     // its REST API; for a plain v2 registry the projects are repository-name
     // namespaces (first path segment), loaded by loadNamespaces().
-    const projects = IM.state.projects.filter((p) => !q || p.name.toLowerCase().includes(q));
-    if (!projects.length) { tree.appendChild(IM.el("div", "muted", IM.t("noData"))); return; }
+    const projects = IM.state.projects.filter((p) => {
+      const m = match(p);
+      return m.project || m.repos.length;
+    });
+    if (!projects.length) {
+      if (q && IM.state.searchLoading) tree.appendChild(IM.loadingHTML());
+      else tree.appendChild(IM.el("div", "muted", IM.t("noData")));
+      return;
+    }
     for (const p of projects) {
+      const m = match(p);
       const item = IM.treeItem("project", "folder", p.name, p.repo_count ? String(p.repo_count) : "");
       item.addEventListener("click", () => IM.selectProject(p));
       // Per-folder settings entry: a gear on the project row, Harbor only.
@@ -50,22 +80,20 @@
         item.appendChild(gear);
       }
       tree.appendChild(item);
-      if (IM.state.expandedProject === p.name && IM.state.reposLoading && !IM.state.repos.length) {
-        const wait = IM.el("div", "tree-loading");
-        wait.appendChild(IM.el("span", "spinner"));
-        wait.appendChild(IM.el("span", "", IM.t("loading")));
-        tree.appendChild(wait);
-      }
-      if (IM.state.expandedProject === p.name) {
-        for (const r of IM.state.repos) {
-          const key = IM.state.mode === "harbor"
-            ? IM.cacheKey("artifacts", p.name, r.name)
-            : IM.cacheKey("tags", null, r.full_name);
-          const ri = IM.treeItem("repo", "repo", r.name, r.artifact_count ? String(r.artifact_count) : "", "lvl2", key);
-          ri.addEventListener("click", () => IM.selectRepo(p, r));
-          if (IM.state.current.repo === r.full_name) ri.classList.add("active");
-          tree.appendChild(ri);
+      if (!q) {
+        // No search: the original drill-down, one expanded project at a time.
+        if (IM.state.expandedProject === p.name && IM.state.reposLoading && !IM.state.repos.length) {
+          const wait = IM.el("div", "tree-loading");
+          wait.appendChild(IM.el("span", "spinner"));
+          wait.appendChild(IM.el("span", "", IM.t("loading")));
+          tree.appendChild(wait);
         }
+        if (IM.state.expandedProject === p.name) {
+          for (const r of IM.state.repos) tree.appendChild(IM.repoRow(p, r));
+        }
+      } else {
+        // Searching: the matching rows, whether or not the project was open.
+        for (const r of m.repos) tree.appendChild(IM.repoRow(p, r));
       }
       if (IM.state.current.project === p.name && IM.state.current.repo == null) item.classList.add("active");
     }
@@ -73,6 +101,62 @@
     IM.syncRowSpinners();
     IM.syncCleanupButton();   // cleanup needs Harbor + a selected project
   }
+
+  /** One repository row, wired to open the repository. */
+  IM.repoRow = function repoRow(p, r) {
+    const key = IM.state.mode === "harbor"
+      ? IM.cacheKey("artifacts", p.name, r.name)
+      : IM.cacheKey("tags", null, r.full_name);
+    const ri = IM.treeItem("repo", "repo", r.name, r.artifact_count ? String(r.artifact_count) : "", "lvl2", key);
+    ri.addEventListener("click", () => IM.selectRepo(p, r));
+    if (IM.state.current.repo === r.full_name) ri.classList.add("active");
+    return ri;
+  };
+
+  /**
+   * Fills the search index — one repository listing per project — so a search
+   * can match repository names, including ones inside projects that were never
+   * expanded.
+   *
+   * Called while a search is active, after the input stops moving. Listings go
+   * through the same cache as the tree, so an expanded project costs nothing
+   * and a repeated search is served from memory. Batched a few projects at a
+   * time: a real registry can have dozens, and a burst of one request each
+   * looks like an outage to a small Harbor.
+   */
+  IM.ensureSearchIndex = async function ensureSearchIndex() {
+    if (!IM.state.search.trim()) return;
+    const mode = IM.state.mode;
+    const conn = IM.state.connectionId;
+    if (IM.state.searchIndexMode === mode && IM.state.searchIndexConn === conn) return;
+    if (IM.state.searchLoading) return;
+    IM.state.searchLoading = true;
+    const projects = IM.state.projects.slice();
+    const harbor = mode === "harbor";
+    const index = {};
+    const BATCH = 4;
+    for (let i = 0; i < projects.length; i += BATCH) {
+      const rows = await Promise.all(projects.slice(i, i + BATCH).map((p) =>
+        IM.fetchCached("repos", p.name, "", harbor ? "harbor/repositories" : "registry/repositories",
+                       harbor ? { project: p.name } : { namespace: p.name })
+          .then((repos) => [p.name, repos || []])
+          // One unreadable project must not blank the whole search; opening it
+          // reports the failure on its own.
+          .catch(() => [p.name, []])));
+      for (const [name, repos] of rows) index[name] = repos;
+      // The connection may have changed while these were in flight; those rows
+      // describe another registry.
+      if (IM.state.connectionId !== conn || IM.state.mode !== mode) {
+        IM.state.searchLoading = false;
+        return;
+      }
+    }
+    IM.state.searchRepos = index;
+    IM.state.searchIndexMode = mode;
+    IM.state.searchIndexConn = conn;
+    IM.state.searchLoading = false;
+    IM.renderSidebar();
+  };
 
   /**
    * @param key  cache key for this row, so an in-flight fetch can show a spinner

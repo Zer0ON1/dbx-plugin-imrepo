@@ -4,6 +4,28 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
+## Unreleased
+
+**The search box found projects but not repositories ([#2]).** Its placeholder
+says "search repos / projects", and the filter compared only project names —
+typing `ledger-api` emptied the tree even though the repository was there under
+`payments`.
+
+Repository rows are loaded one project at a time, so a name filter had nothing
+to compare against beyond whichever project happened to be open. While a search
+is active the workbench now builds an index of every project's repository
+listing — through the same cache the tree uses, a few projects at a time — and
+filters that: a matching repository pulls its project into the view even when
+the project name does not match, and a matching project shows its repositories
+without being expanded first. Harbor projects and v2 namespaces both work.
+
+The index is dropped when the connection changes or a repository is deleted,
+renamed or cleaned up, so the next search re-reads instead of filtering stale
+rows. It is also not built until the search input settles, so typing does not
+start one sweep over the project list per keystroke.
+
+[#2]: https://github.com/Zer0ON1/dbx-plugin-imrepo/issues/2
+
 ## 0.1.81
 
 **Deleting a repository or a whole project.** Harbor has always allowed both,
