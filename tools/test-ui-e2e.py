@@ -550,6 +550,15 @@ def main() -> int:
         check("a fully-qualified repository name matches too",
               "team-alpha" in tree and ">app<" in tree, tree[:400])
 
+        # The Harbor equivalent of "project/public/prometheus/grafana": a nested
+        # repository addressed by its full name (project + name within project).
+        dom = browser.dom("theme=light&search=payments/kylin/kylin-server-minimal", 9000)
+        tree = tree_of(dom)
+        check("a nested repository matches by its fully-qualified name",
+              "kylin/kylin-server-minimal" in tree and "payments" in tree, tree[:400])
+        check("...and that full-name search leaks no other project",
+              "checkout" not in tree, tree[:400])
+
         print("\nJ) a v2 tag table lazily shows each tag's architectures")
         dom = browser.dom("theme=light&mode=docker", 8000)
         check("the tag table opens under a namespace",
