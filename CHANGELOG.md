@@ -4,7 +4,7 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
-## Unreleased
+## 0.1.9
 
 **The search box found projects but not repositories ([#2]).** Its placeholder
 says "search repos / projects", and the filter compared only project names —
