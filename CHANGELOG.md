@@ -4,7 +4,13 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
-## Unreleased
+## 1.0.0
+
+**Release cadence.** Starting with 1.0.0, bug fixes are no longer shipped as
+they land. They are collected and released with the next major version; only
+critical bugs — security issues and failures that block a core workflow — get a
+hotfix release on the current major version. This release marks the plugin's
+first stable version and the start of that schedule.
 
 **A project's repository count disagreed between the tree and the overview
 ([#3]).** The sidebar row showed the count Harbor reports (`repo_count`), while
