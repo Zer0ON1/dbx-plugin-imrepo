@@ -275,13 +275,17 @@ func clampInt(v, lo, hi, def int) int {
 // and counted for 1/3/7 days at the same time so switching the window in the
 // UI never costs another request.
 type RegistryOverview struct {
-	ProjectCount  int            `json:"projectCount"`
-	ImageCount    int            `json:"imageCount"`
-	RepoCount     int            `json:"repoCount"`
-	TotalSize     int64          `json:"totalSize"`
-	PullCounts    map[string]int `json:"pullCounts"` // "1" | "3" | "7" days
-	PullTruncated bool           `json:"pullTruncated"`
-	ProjectErrors []string       `json:"projectErrors,omitempty"`
+	ProjectCount int            `json:"projectCount"`
+	ImageCount   int            `json:"imageCount"`
+	RepoCount    int            `json:"repoCount"`
+	TotalSize    int64          `json:"totalSize"`
+	PullCounts   map[string]int `json:"pullCounts"` // "1" | "3" | "7" days
+	// PullTruncated says the audit-log window was cut short; Truncated says the
+	// artifact walk hit its page budget, so TotalSize is a floor. They are
+	// separate because the pull window and the size scan are independent.
+	PullTruncated bool     `json:"pullTruncated"`
+	Truncated     bool     `json:"truncated"`
+	ProjectErrors []string `json:"projectErrors,omitempty"`
 	// RecentProjects are the newest projects (by creation_time), TopPulled the
 	// most-pulled over the last 7 days — the sidebar overview links to these.
 	RecentProjects []map[string]any `json:"recentProjects,omitempty"`
@@ -290,6 +294,15 @@ type RegistryOverview struct {
 	// storage-distribution chart.
 	SizeByProject []map[string]any `json:"sizeByProject,omitempty"`
 }
+
+// overviewArtifactPageBudget bounds the registry-wide artifact walk. Harbor has
+// no storage aggregate, so the total size costs one list page (100 artifacts)
+// per repository; a registry with tens of thousands of artifacts would keep the
+// overview waiting on hundreds of requests. Past the budget the remaining
+// repositories still contribute their own artifact_count to the image total,
+// and Truncated tells the UI that the size is a floor. A repository whose
+// artifact_count is zero is skipped outright — listing it would answer nothing.
+const overviewArtifactPageBudget = 500
 
 func registryOverview(ctx context.Context, s *Session, params map[string]any) (any, error) {
 	if err := requireHarbor(s); err != nil {
@@ -313,7 +326,7 @@ func registryOverview(ctx context.Context, s *Session, params map[string]any) (a
 		err   error
 	}
 	results := make([]projRepos, len(projects))
-	poolMap(4, len(projects), func(i int) {
+	poolMap(8, len(projects), func(i int) {
 		repos, err := s.Harbor.Repositories(ctx, projects[i].Name)
 		results[i] = projRepos{name: projects[i].Name, repos: repos, err: err}
 	})
@@ -323,6 +336,7 @@ func registryOverview(ctx context.Context, s *Session, params map[string]any) (a
 		repo    HarborRepository
 	}
 	jobs := make([]job, 0, 64)
+	pageBudget := 0
 	for _, r := range results {
 		if r.err != nil {
 			out.ProjectErrors = append(out.ProjectErrors, fmt.Sprintf("%s: %v", r.name, r.err))
@@ -330,11 +344,23 @@ func registryOverview(ctx context.Context, s *Session, params map[string]any) (a
 		}
 		out.RepoCount += len(r.repos)
 		for _, repo := range r.repos {
+			if repo.ArtifactCount <= 0 {
+				continue // nothing to list, and the count contributes nothing
+			}
+			need := int((repo.ArtifactCount + 99) / 100)
+			if pageBudget+need > overviewArtifactPageBudget {
+				// Count it from Harbor's own field; only the size needs the
+				// listing we are declining to make.
+				out.Truncated = true
+				out.ImageCount += int(repo.ArtifactCount)
+				continue
+			}
+			pageBudget += need
 			jobs = append(jobs, job{project: r.name, repo: repo})
 		}
 	}
 
-	const overviewWorkers = 6
+	const overviewWorkers = 12
 	pages := make([][]HarborArtifact, len(jobs))
 	errMsgs := make([]string, len(jobs))
 	poolMap(overviewWorkers, len(jobs), func(i int) {

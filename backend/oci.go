@@ -23,8 +23,12 @@ func httpClient(conn *Connection) *http.Client {
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
 		TLSClientConfig:     &tls.Config{InsecureSkipVerify: conn.configBool("insecure")},
-		MaxIdleConns:        20,
-		MaxIdleConnsPerHost: 5,
+		// The list walk runs several requests to the same host at once (up to
+		// harborArtifactWorkers). The idle pool must be at least that wide or
+		// each round of requests pays a new TLS handshake for every connection
+		// over the limit.
+		MaxIdleConns:        32,
+		MaxIdleConnsPerHost: 16,
 		IdleConnTimeout:     90 * time.Second,
 	}
 	return &http.Client{Transport: tr, Timeout: 60 * time.Second}

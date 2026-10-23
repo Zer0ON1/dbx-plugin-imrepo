@@ -20,6 +20,16 @@ repository listing, the project overview and the registry-wide overview all
 agree with Harbor's own count. The same walk covers the project list, which was
 likewise capped at 100 projects.
 
+The artifact listing had the same cap — a repository with more than 100
+artifacts reported a short image count and an understated size — and is walked
+page by page as well.
+
+The overview walk is also bounded: repositories Harbor reports as empty are
+skipped without a request, connections are reused across the worker pool, and
+the scan stops after 500 artifact pages (50,000 artifacts). Past the budget the
+remaining repositories still contribute their own `artifact_count` to the image
+total; the size is a floor and the pane says so.
+
 [#3]: https://github.com/Zer0ON1/dbx-plugin-imrepo/issues/3
 
 ## 0.1.9

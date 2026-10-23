@@ -129,7 +129,7 @@
       body.appendChild(IM.hBarChart(IM.t(IM.state.mode === "harbor" ? "ov.sizeByProject" : "ov.sizeByNamespace"),
         sizeItems.map((p) => ({ label: p.name, value: p.size })), IM.fmtSize));
 
-      if (o.truncated) body.appendChild(IM.el("p", "hint", IM.t("ov.truncated")));
+      if (o.truncated) body.appendChild(IM.el("p", "hint", IM.t("ov.scanTruncated")));
       const errs = o.projectErrors || o.errors || [];
       if (errs.length) {
         const p = IM.el("p", "hint warn", IM.t("ov.errors") + " (" + errs.length + ")");

@@ -14,11 +14,18 @@ must report 133 everywhere the count is shown.
 Covered:
   A  repositories — the project listing returns all 133 rows, first to last,
                     not page 1 repeated or silently cut at 100.
+  A2 artifacts    — a repository with 133 artifacts lists all of them across
+                    two pages.
   B  project images — repositoryCount is the complete 133 even though the
-                    artifact walk stays bounded (truncated).
-  C  overview      — the registry-wide repoCount is 133, not 100.
-  D  projects      — a 150-project registry lists all of them, not the first
-                   100-row page.
+                    artifact walk stays bounded (truncated); empty repositories
+                    cost no artifact request.
+  C  overview     — the registry-wide repoCount is 133, not 100; imageCount and
+                    totalSize include every artifact; empty repositories are
+                    skipped.
+  D  projects     — a 150-project registry lists all of them, not the first
+                    100-row page.
+  E  budget       — past 500 artifact pages the overview stops walking, counts
+                    the rest from artifact_count, and reports truncated.
 
 Run:  python tools/test-harbor-paging-e2e.py      (exit 0 = all pass)
 """
@@ -41,11 +48,26 @@ PORT = 5033
 PROJECT = "big"
 REPO_TOTAL = 133
 PAGE_SIZE_CAP = 100
+ARTIFACT_TOTAL = 133
+
+# One repository carries more artifacts than a page; every other one is empty,
+# which is also what lets the overview skip them.
+ARTIFACTS = [
+    {
+        "digest": f"sha256:{i:064x}",
+        "type": "IMAGE",
+        "size": 1,
+        "media_type": "application/vnd.oci.image.manifest.v1+json",
+        "push_time": "2026-09-18T16:54:40Z",
+        "tags": [{"name": f"v{i}"}],
+    }
+    for i in range(ARTIFACT_TOTAL)
+]
 
 REPOS = [
     {
         "name": f"{PROJECT}/repo-{i:03d}",
-        "artifact_count": 0,
+        "artifact_count": ARTIFACT_TOTAL if i == 0 else 0,
         "pull_count": 0,
         "update_time": "2026-09-18T16:54:40Z",
     }
@@ -73,6 +95,36 @@ MANY_PROJECTS = [
     for i in range(MANY_PROJECTS_TOTAL)
 ]
 
+# Scenario E: more artifact pages than the overview's budget. Every repository
+# claims 100 artifacts, so 501 of them are 501 pages against a 500-page budget.
+BUDGET_PROJECT = "budget"
+BUDGET_REPO_TOTAL = 501
+BUDGET_ARTIFACTS_PER_REPO = 100
+BUDGET_REPOS = [
+    {
+        "name": f"{BUDGET_PROJECT}/repo-{i:03d}",
+        "artifact_count": BUDGET_ARTIFACTS_PER_REPO,
+        "pull_count": 0,
+        "update_time": "2026-09-18T16:54:40Z",
+    }
+    for i in range(BUDGET_REPO_TOTAL)
+]
+BUDGET_ARTIFACTS = [
+    {
+        "digest": f"sha256:{i:064x}",
+        "type": "IMAGE",
+        "size": 1,
+        "media_type": "application/vnd.oci.image.manifest.v1+json",
+        "push_time": "2026-09-18T16:54:40Z",
+        "tags": [{"name": f"v{i}"}],
+    }
+    for i in range(BUDGET_ARTIFACTS_PER_REPO)
+]
+
+# Every artifact listing request, so a scenario can prove the walk skipped the
+# empty repositories and stopped at the budget.
+ARTIFACT_REQUESTS: list[str] = []
+
 
 def page_of(items: list, path: str) -> tuple[list, int]:
     """Slice `items` the way Harbor does: page starts at 1, size caps at 100."""
@@ -84,8 +136,11 @@ def page_of(items: list, path: str) -> tuple[list, int]:
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    # Scenario D flips this to serve a project list longer than one page.
+    # Scenario D flips this to serve a project list longer than one page;
+    # scenario E flips it to one project with more artifact pages than the
+    # overview will walk.
     many_projects = False
+    budget_mode = False
 
     def _send(self, obj, code=200, total=None):
         body = json.dumps(obj).encode()
@@ -105,16 +160,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if route == "/api/v2.0/ping":
             return self._send({})
         if route == "/api/v2.0/projects":
-            projects = MANY_PROJECTS if self.many_projects else [PROJECT_OBJECT]
+            if self.budget_mode:
+                projects = [{
+                    "project_id": 2,
+                    "name": BUDGET_PROJECT,
+                    "public": True,
+                    "repo_count": BUDGET_REPO_TOTAL,
+                    "creation_time": "2026-09-01T00:00:00Z",
+                }]
+            elif self.many_projects:
+                projects = MANY_PROJECTS
+            else:
+                projects = [PROJECT_OBJECT]
             rows, total = page_of(projects, self.path)
             return self._send(rows, total=total)
         if route == f"/api/v2.0/projects/{PROJECT}/repositories":
             rows, total = page_of(REPOS, self.path)
             return self._send(rows, total=total)
+        if route == f"/api/v2.0/projects/{BUDGET_PROJECT}/repositories":
+            rows, total = page_of(BUDGET_REPOS, self.path)
+            return self._send(rows, total=total)
         if "/repositories/" in route and route.endswith("/artifacts"):
-            # Empty artifact pages keep the overview walk fast; the repository
-            # count is what this test asserts.
-            return self._send([], total=0)
+            ARTIFACT_REQUESTS.append(route)
+            repo = urllib.parse.unquote(route.split("/repositories/", 1)[1].split("/artifacts", 1)[0])
+            if self.budget_mode:
+                items = BUDGET_ARTIFACTS
+            elif repo == "repo-000":
+                items = ARTIFACTS
+            else:
+                items = []
+            rows, total = page_of(items, self.path)
+            return self._send(rows, total=total)
         if route == "/api/v2.0/audit-logs":
             return self._send([], total=0)
         if route.startswith("/v2/"):
@@ -185,15 +261,35 @@ def main() -> int:
               bool(repos) and repos[-1]["full_name"] == f"{PROJECT}/repo-132",
               repos[-1:])
 
+        print("\nA2) a 133-artifact repository lists all of them")
+        ARTIFACT_REQUESTS.clear()
+        r = sc.call("harbor/artifacts", {"connectionId": "h1", "project": PROJECT, "repository": "repo-000"})
+        arts = r.get("result") or []
+        check("the artifact listing succeeds", "error" not in r, r)
+        check("all 133 artifacts are returned", len(arts) == ARTIFACT_TOTAL,
+              f"got {len(arts)}")
+        check("the first artifact is digest 0",
+              bool(arts) and arts[0]["digest"] == f"sha256:{0:064x}", arts[:1])
+        check("the last artifact is digest 132",
+              bool(arts) and arts[-1]["digest"] == f"sha256:{ARTIFACT_TOTAL - 1:064x}",
+              arts[-1:])
+        check("the artifact walk read two pages", len(ARTIFACT_REQUESTS) == 2,
+              f"got {len(ARTIFACT_REQUESTS)} requests")
+
         print("\nB) the project image overview counts all 133")
+        ARTIFACT_REQUESTS.clear()
         r = sc.call("harbor/images", {"connectionId": "h1", "project": PROJECT})
         imgs = r.get("result") or {}
         check("the project overview succeeds", "error" not in r, r)
         check("repositoryCount is the complete count, not the page size",
               imgs.get("repositoryCount") == REPO_TOTAL,
               f"got {imgs.get('repositoryCount')}")
+        check("the project walk lists the non-empty repository only",
+              len(ARTIFACT_REQUESTS) == 2,
+              f"got {len(ARTIFACT_REQUESTS)} requests")
 
         print("\nC) the registry-wide overview counts all 133")
+        ARTIFACT_REQUESTS.clear()
         r = sc.call("harbor/overview", {"connectionId": "h1"})
         ov = r.get("result") or {}
         check("the registry overview succeeds", "error" not in r, r)
@@ -202,6 +298,15 @@ def main() -> int:
               f"got {ov.get('repoCount')}")
         check("projectCount is 1", ov.get("projectCount") == 1,
               f"got {ov.get('projectCount')}")
+        check("imageCount includes every artifact", ov.get("imageCount") == ARTIFACT_TOTAL,
+              f"got {ov.get('imageCount')}")
+        check("totalSize sums every artifact", ov.get("totalSize") == ARTIFACT_TOTAL,
+              f"got {ov.get('totalSize')}")
+        check("the overview is not truncated", ov.get("truncated") is not True,
+              ov.get("truncated"))
+        check("the overview skips the 132 empty repositories",
+              len(ARTIFACT_REQUESTS) == 2,
+              f"got {len(ARTIFACT_REQUESTS)} requests")
 
         print("\nD) a project list longer than one page is complete too")
         Handler.many_projects = True
@@ -214,6 +319,27 @@ def main() -> int:
               bool(projects) and projects[0]["name"] == "p000", projects[:1])
         check("the last project is p149",
               bool(projects) and projects[-1]["name"] == "p149", projects[-1:])
+
+        print("\nE) the overview stops at its scan budget")
+        Handler.budget_mode = True
+        ARTIFACT_REQUESTS.clear()
+        r = sc.call("harbor/overview", {"connectionId": "h1"})
+        ov = r.get("result") or {}
+        check("the budgeted overview succeeds", "error" not in r, r)
+        check("repoCount still counts every repository",
+              ov.get("repoCount") == BUDGET_REPO_TOTAL,
+              f"got {ov.get('repoCount')}")
+        check("the walk stops after 500 artifact pages",
+              len(ARTIFACT_REQUESTS) == 500,
+              f"got {len(ARTIFACT_REQUESTS)} requests")
+        check("imageCount uses artifact_count for the skipped repository",
+              ov.get("imageCount") == BUDGET_REPO_TOTAL * BUDGET_ARTIFACTS_PER_REPO,
+              f"got {ov.get('imageCount')}")
+        check("totalSize covers the scanned repositories",
+              ov.get("totalSize") == 500 * BUDGET_ARTIFACTS_PER_REPO,
+              f"got {ov.get('totalSize')}")
+        check("the overview reports the truncation", ov.get("truncated") is True,
+              ov.get("truncated"))
     finally:
         srv.shutdown()
 

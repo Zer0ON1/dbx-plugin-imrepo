@@ -210,15 +210,9 @@ func (a *HarborArtifact) arches() []string {
 func (h *HarborClient) Artifacts(ctx context.Context, project, repo string) ([]HarborArtifact, error) {
 	p := url.PathEscape(project)
 	r := escapeRepo(repo)
-	data, code, err := h.do(ctx, http.MethodGet, "/api/v2.0/projects/"+p+"/repositories/"+r+"/artifacts?page=1&page_size=100&with_tag=true")
+	out, err := listAllPages[HarborArtifact](ctx, h, "harbor artifacts",
+		"/api/v2.0/projects/"+p+"/repositories/"+r+"/artifacts?with_tag=true")
 	if err != nil {
-		return nil, err
-	}
-	if code != http.StatusOK {
-		return nil, fmt.Errorf("harbor artifacts failed (%d): %s", code, truncate(string(data), 300))
-	}
-	var out []HarborArtifact
-	if err := json.Unmarshal(data, &out); err != nil {
 		return nil, err
 	}
 	for i := range out {
@@ -289,6 +283,12 @@ func escapeRepo(repo string) string {
 	return url.PathEscape(url.PathEscape(repo))
 }
 
+// harborArtifactWorkers bounds the per-repository artifact fetches. Each fetch
+// may now span several pages (Harbor caps a page at 100), so the walk is
+// network-bound; 12 is enough to keep a large project responsive without
+// looking like a burst to a small Harbor.
+const harborArtifactWorkers = 12
+
 // artifactPages fetches each repository's artifacts concurrently, bounded by
 // workers. The result is index-aligned with repos; errMsgs[i] is empty when the
 // repository was read successfully. Writes go to per-index slots so the
@@ -297,6 +297,12 @@ func (h *HarborClient) artifactPages(ctx context.Context, project string, repos 
 	pages := make([][]HarborArtifact, len(repos))
 	errMsgs := make([]string, len(repos))
 	poolMap(workers, len(repos), func(i int) {
+		// Harbor's own count says there is nothing to list; asking would cost a
+		// round trip for an empty array. The overview leans on this too: most
+		// repositories in a real registry are empty.
+		if repos[i].ArtifactCount <= 0 {
+			return
+		}
 		arts, err := h.Artifacts(ctx, project, repos[i].Name)
 		if err != nil {
 			errMsgs[i] = fmt.Sprintf("%s: %v", repos[i].Name, err)
@@ -326,7 +332,7 @@ func (h *HarborClient) Untagged(ctx context.Context, project string, rules Clean
 	}
 
 	now := time.Now()
-	pages, errMsgs := h.artifactPages(ctx, project, repos, 6)
+	pages, errMsgs := h.artifactPages(ctx, project, repos, harborArtifactWorkers)
 	for i, arts := range pages {
 		if errMsgs[i] != "" {
 			// One unreadable repository must not fail the whole scan.
@@ -809,7 +815,7 @@ func (h *HarborClient) ProjectImages(ctx context.Context, project string, maxRep
 
 	// Concurrent fetch keeps the overview fast on a project with many
 	// repositories; aggregation below stays sequential and deterministic.
-	pages, errMsgs := h.artifactPages(ctx, project, repos, 6)
+	pages, errMsgs := h.artifactPages(ctx, project, repos, harborArtifactWorkers)
 	for i, arts := range pages {
 		if errMsgs[i] != "" {
 			out.RepoErrors = append(out.RepoErrors, errMsgs[i])
