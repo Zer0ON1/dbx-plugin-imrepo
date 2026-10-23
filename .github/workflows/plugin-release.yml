@@ -104,6 +104,7 @@ jobs:
           python tools/test-settings-e2e.py
           python tools/test-layers-e2e.py
           python tools/test-cleanup-e2e.py
+          python tools/test-harbor-paging-e2e.py
           python tools/test-retag-e2e.py
           python tools/test-mcp-e2e.py
 

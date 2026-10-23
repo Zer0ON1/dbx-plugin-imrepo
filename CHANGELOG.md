@@ -4,6 +4,24 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
+## Unreleased
+
+**A project's repository count disagreed between the tree and the overview
+([#3]).** The sidebar row showed the count Harbor reports (`repo_count`), while
+the overview counted the repositories it could actually list.
+
+Harbor pages every list endpoint and caps `page_size` at 100 — a larger value is
+rejected with HTTP 422 — and the client only ever read page 1. A project with
+133 repositories was therefore shown as 100 in the overview and in the project
+view, while the project row kept Harbor's 133.
+
+List endpoints are now walked page by page (following `X-Total-Count`), so the
+repository listing, the project overview and the registry-wide overview all
+agree with Harbor's own count. The same walk covers the project list, which was
+likewise capped at 100 projects.
+
+[#3]: https://github.com/Zer0ON1/dbx-plugin-imrepo/issues/3
+
 ## 0.1.9
 
 **The search box found projects but not repositories ([#2]).** Its placeholder

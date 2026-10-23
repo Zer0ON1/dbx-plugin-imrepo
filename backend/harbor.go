@@ -81,19 +81,48 @@ type HarborProject struct {
 	CreationTime string `json:"creation_time"`
 }
 
-func (h *HarborClient) Projects(ctx context.Context) ([]HarborProject, error) {
-	data, code, err := h.do(ctx, http.MethodGet, "/api/v2.0/projects?page=1&page_size=100")
-	if err != nil {
-		return nil, err
-	}
-	if code != http.StatusOK {
-		return nil, fmt.Errorf("harbor projects failed (%d): %s", code, truncate(string(data), 300))
-	}
-	var out []HarborProject
-	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, err
+// Harbor caps page_size at 100 (a larger value is rejected with HTTP 422) and
+// every list endpoint is paginated, so asking for page 1 and stopping sees at
+// most 100 rows while the server-side counters — a project's repo_count, for
+// one — keep the real number. That mismatch is issue #3: a 133-repository
+// project listed as 100 in the overview. listAllPages walks until Harbor says
+// the list is exhausted, so every caller receives the complete list.
+func listAllPages[T any](ctx context.Context, h *HarborClient, what, path string) ([]T, error) {
+	const (
+		pageSize = 100
+		maxPages = 1000 // guard: a server that ignores `page` must not loop forever
+	)
+	var out []T
+	for page := 1; page <= maxPages; page++ {
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		data, code, total, err := h.doCounting(ctx, http.MethodGet,
+			fmt.Sprintf("%s%spage=%d&page_size=%d", path, sep, page, pageSize))
+		if err != nil {
+			return nil, err
+		}
+		if code != http.StatusOK {
+			return nil, fmt.Errorf("%s failed (%d): %s", what, code, truncate(string(data), 300))
+		}
+		var rows []T
+		if err := json.Unmarshal(data, &rows); err != nil {
+			return nil, err
+		}
+		out = append(out, rows...)
+		// A short page is the last page. X-Total-Count is the cheaper stop when
+		// it is present: a list whose size is a multiple of pageSize would
+		// otherwise cost one empty request.
+		if len(rows) < pageSize || (total > 0 && len(out) >= total) {
+			break
+		}
 	}
 	return out, nil
+}
+
+func (h *HarborClient) Projects(ctx context.Context) ([]HarborProject, error) {
+	return listAllPages[HarborProject](ctx, h, "harbor projects", "/api/v2.0/projects")
 }
 
 type HarborRepository struct {
@@ -107,15 +136,9 @@ type HarborRepository struct {
 
 func (h *HarborClient) Repositories(ctx context.Context, project string) ([]HarborRepository, error) {
 	p := url.PathEscape(project)
-	data, code, err := h.do(ctx, http.MethodGet, "/api/v2.0/projects/"+p+"/repositories?page=1&page_size=100")
+	out, err := listAllPages[HarborRepository](ctx, h, "harbor repositories",
+		"/api/v2.0/projects/"+p+"/repositories")
 	if err != nil {
-		return nil, err
-	}
-	if code != http.StatusOK {
-		return nil, fmt.Errorf("harbor repositories failed (%d): %s", code, truncate(string(data), 300))
-	}
-	var out []HarborRepository
-	if err := json.Unmarshal(data, &out); err != nil {
 		return nil, err
 	}
 	for i := range out {
