@@ -82,14 +82,18 @@
       tree.appendChild(item);
       if (!q) {
         // No search: the original drill-down, one expanded project at a time.
-        if (IM.state.expandedProject === p.name && IM.state.reposLoading && !IM.state.repos.length) {
+        // A backend answer is trusted to be a list; the `|| []` keeps a bad
+        // answer (null is what a nil Go slice marshals to) from aborting the
+        // whole tree render and hiding every project below this one.
+        const expandedRepos = IM.state.repos || [];
+        if (IM.state.expandedProject === p.name && IM.state.reposLoading && !expandedRepos.length) {
           const wait = IM.el("div", "tree-loading");
           wait.appendChild(IM.el("span", "spinner"));
           wait.appendChild(IM.el("span", "", IM.t("loading")));
           tree.appendChild(wait);
         }
         if (IM.state.expandedProject === p.name) {
-          for (const r of IM.state.repos) tree.appendChild(IM.repoRow(p, r));
+          for (const r of expandedRepos) tree.appendChild(IM.repoRow(p, r));
         }
       } else {
         // Searching: the matching rows, whether or not the project was open.
@@ -183,7 +187,7 @@
   IM.loadCatalog = async function loadCatalog() {
     IM.$("#tree").innerHTML = IM.loadingHTML();
     try {
-      IM.state.repos = await IM.fetchCached("catalog", null, "", "registry/catalog", {});
+      IM.state.repos = (await IM.fetchCached("catalog", null, "", "registry/catalog", {})) || [];
       IM.schedulePrefetch(IM.state.repos.map((r) => ({ kind: "tags", repo: r })));
     } catch (e) {
       IM.state.repos = [];
@@ -200,7 +204,7 @@
   IM.loadNamespaces = async function loadNamespaces() {
     IM.$("#tree").innerHTML = IM.loadingHTML();
     try {
-      IM.state.projects = await IM.invoke("registry/namespaces", {});
+      IM.state.projects = (await IM.invoke("registry/namespaces", {})) || [];
       IM.state.repos = [];
     } catch (e) {
       IM.state.projects = [];
@@ -241,9 +245,9 @@
     if (!project || IM.state.expandedProject !== project) return;
     IM.invalidate(IM.cacheKey("repos", project, ""));
     try {
-      IM.state.repos = IM.state.mode === "harbor"
+      IM.state.repos = (IM.state.mode === "harbor"
         ? await IM.fetchCached("repos", project, "", "harbor/repositories", { project })
-        : await IM.fetchCached("repos", project, "", "registry/repositories", { namespace: project });
+        : await IM.fetchCached("repos", project, "", "registry/repositories", { namespace: project })) || [];
     } catch (_) {
       // Keep the rows we have; the content pane already reported the mutation.
     }
@@ -253,13 +257,13 @@
   IM.ensureProjectExpanded = async function ensureProjectExpanded(name) {
     if (!name) return;
     IM.state.expandedProject = name;
-    if (IM.state.repos.length) return;
+    if ((IM.state.repos || []).length) return;
     IM.state.reposLoading = true;
     IM.renderSidebar();
     try {
-      IM.state.repos = IM.state.mode === "harbor"
+      IM.state.repos = (IM.state.mode === "harbor"
         ? await IM.fetchCached("repos", name, "", "harbor/repositories", { project: name })
-        : await IM.fetchCached("repos", name, "", "registry/repositories", { namespace: name });
+        : await IM.fetchCached("repos", name, "", "registry/repositories", { namespace: name })) || [];
     } catch (e) {
       // Show the folder empty rather than a spinner that never resolves; the
       // content pane is already rendering the repository the user asked for.
@@ -289,7 +293,7 @@
       // pane waiting for a repository click.
       IM.showProjectImages(p.name);
       try {
-        IM.state.repos = await IM.fetchCached("repos", p.name, "", "harbor/repositories", { project: p.name });
+        IM.state.repos = (await IM.fetchCached("repos", p.name, "", "harbor/repositories", { project: p.name })) || [];
         // Warm the first few repositories so clicking one is instant rather than a
         // multi-second wait. Runs one request at a time, in the background.
         IM.schedulePrefetch(IM.state.repos.map((r) => ({ kind: "artifacts", project: p.name, repo: r.name })));
@@ -300,7 +304,7 @@
       // A v2 namespace acts as the project: overview lists its repos/images.
       IM.showV2ProjectOverview(p.name);
       try {
-        IM.state.repos = await IM.fetchCached("repos", p.name, "", "registry/repositories", { namespace: p.name });
+        IM.state.repos = (await IM.fetchCached("repos", p.name, "", "registry/repositories", { namespace: p.name })) || [];
         IM.schedulePrefetch(IM.state.repos.map((r) => ({ kind: "tags", repo: r.full_name })));
       } catch (e) {
         IM.toast(e.message || IM.t("failed"), "err");

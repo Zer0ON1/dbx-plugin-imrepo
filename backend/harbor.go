@@ -92,7 +92,10 @@ func listAllPages[T any](ctx context.Context, h *HarborClient, what, path string
 		pageSize = 100
 		maxPages = 1000 // guard: a server that ignores `page` must not loop forever
 	)
-	var out []T
+	// Non-nil even when there is nothing to return: a nil slice marshals to
+	// null, and every caller treats the answer as a list — the UI calls .map on
+	// it, and an empty Harbor answered null for a project with no repositories.
+	out := make([]T, 0, pageSize)
 	for page := 1; page <= maxPages; page++ {
 		sep := "?"
 		if strings.Contains(path, "?") {

@@ -40,16 +40,35 @@
       const top = IM.el("div", "cmd-row-top");
       top.appendChild(IM.el("span", "cmd-label", v.label));
 
-      const btn = IM.el("button", "btn btn-outline btn-sm copy-btn", IM.t("copy"));
-      let timer = null;
-      const flash = (label) => {
-        btn.textContent = label;
-        clearTimeout(timer);
-        timer = setTimeout(() => (btn.textContent = IM.t("copy")), 1200);
+      // The button is an icon: copy → green check → fade back to copy. The row
+      // itself stays the hit target; the button just makes that obvious.
+      const btn = IM.el("button", "icon-btn copy-btn");
+      btn.type = "button";
+      const setCopyState = (copied) => {
+        btn.innerHTML = "";
+        btn.classList.toggle("copied", copied);
+        btn.appendChild(IM.svgIcon(copied ? "check" : "copy"));
+        btn.title = IM.t(copied ? "copy.done" : "copy");
+        btn.setAttribute("aria-label", btn.title);
       };
-      // The row itself is the hit target; the button just makes that obvious.
+      setCopyState(false);
+      let timer = null;
+      const flash = (ok) => {
+        if (!ok) return;                 // copyText already reported the failure
+        setCopyState(true);
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          // Fade the check out and only then swap it back: replacing the icon
+          // outright reads as a flicker, while the fade reads as "finished".
+          btn.classList.add("fading");
+          timer = setTimeout(() => {
+            setCopyState(false);
+            btn.classList.remove("fading");
+          }, 260);
+        }, 1400);
+      };
       row.addEventListener("click", async () => {
-        flash((await IM.copyText(v.cmd, true)) ? IM.t("copy.done") : IM.t("copyFailed"));
+        flash(await IM.copyText(v.cmd, true));
       });
       btn.addEventListener("click", (e) => { e.stopPropagation(); row.click(); });
       top.appendChild(btn);

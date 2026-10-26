@@ -395,10 +395,9 @@
       tdDigest.appendChild(dgSpan);
       IM.loadTagArches(repo, tg, archSlot, dgSpan);
       const tdPull = IM.el("td");
-      const pullBtn = IM.el("button", "btn btn-outline btn-sm copy-btn", IM.t("pull"));
-      pullBtn.title = IM.t("pull");
-      pullBtn.addEventListener("click", () => IM.openPull(repo, tg));
-      tdPull.appendChild(pullBtn);
+      // Icon, not the words "Pull command": the action column is a row of icons
+      // in every other cell, and the label lives in the tooltip/aria-label.
+      tdPull.appendChild(IM.iconBtn(IM.t("pull"), "pull", () => IM.openPull(repo, tg)));
       const tdRetag = IM.el("td");
       tdRetag.appendChild(IM.iconBtn(IM.t("retag"), "tag", () => IM.openRetag(repo, [tg], tg)));
       const tdLayers = IM.el("td");
@@ -470,9 +469,8 @@
       const tdSize = IM.el("td", "", IM.fmtSize(a.size));
       const tdPush = IM.el("td", "", IM.fmtTime(a.push_time));
       const tdPull = IM.el("td");
-      const pullBtn = IM.el("button", "btn btn-outline btn-sm copy-btn", IM.t("pull"));
-      pullBtn.addEventListener("click", () => IM.openPull(project + "/" + repo, names[0] || a.digest));
-      tdPull.appendChild(pullBtn);
+      tdPull.appendChild(IM.iconBtn(IM.t("pull"), "pull",
+        () => IM.openPull(project + "/" + repo, names[0] || a.digest)));
       const ref0 = names[0] || a.digest;
       const tdRetag = IM.el("td");
       // A retag needs a tag as its source; untagged artifacts are digest-only.

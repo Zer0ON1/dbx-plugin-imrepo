@@ -143,6 +143,12 @@ def probe_requests(dom: str) -> list[str]:
     return [x for x in (m.group(1) if m else "").split(",") if x]
 
 
+def js_errors(dom: str) -> str:
+    """Uncaught errors the preview harness mirrored into #__jserr."""
+    m = re.search(r'id="__jserr"[^>]*>(.*?)</pre>', dom, re.S)
+    return (m.group(1) if m else "").strip()
+
+
 def main() -> int:
     if not PREVIEW.exists():
         sys.exit("preview harness missing — run: python tools/make-preview.py")
@@ -804,6 +810,57 @@ def main() -> int:
         badges = dom.count('class="arch-badge mono"')
         check("every row still shows both architectures after returning",
               badges == 6, f"{badges} badge(s) on screen, expected 6")
+
+        print("\nO) a project with no repositories keeps the whole tree")
+        # The reported crash: opening an empty project threw on the listing and
+        # the render aborted, so every project BELOW it disappeared from the
+        # sidebar. empty-project sits before base/court/ddf on purpose.
+        dom = browser.dom("theme=light&emptyproject=1", 5000)
+        tree = tree_of(dom)
+        check("the empty project is in the tree", "empty-project" in tree, tree[:400])
+        check("projects below it are still rendered",
+              "base" in tree and "court" in tree and "ddf" in tree, tree[:600])
+        check("no repository rows leaked in from another project",
+              "ledger-api" not in tree, tree[:400])
+        check("the content pane explains there is nothing to show",
+              "暂无数据" in dom, "empty state missing")
+        check("no uncaught JS error", not js_errors(dom), js_errors(dom))
+
+        print("\nP) a null listing (the old backend shape) cannot break the tree either")
+        dom = browser.dom("theme=light&emptyproject=1&nullrepos=1", 5000)
+        tree = tree_of(dom)
+        check("projects below the null-answering project are still rendered",
+              "base" in tree and "court" in tree and "ddf" in tree, tree[:600])
+        check("the null listing raised no uncaught error",
+              not js_errors(dom), js_errors(dom))
+
+        print("\nQ) pull is an icon, and copying gives a green check")
+        dom = browser.dom("theme=light", 4000)
+        check("the pull action has an icon label",
+              'aria-label="拉取命令"' in dom, "no icon button labelled 拉取命令")
+        check("no pull button still renders the words as text",
+              ">拉取命令</button>" not in dom, "a text pull button is still on screen")
+        dom = browser.dom("theme=light&modal=pull&copytest=1", 4000)
+        check("the copy driver ran", 'data-probe-copy="copied:icon:0"' in dom,
+              re.search(r'data-probe-copy="[^"]*"', dom) or "marker missing")
+        check("the check fades back to the copy icon",
+              'data-probe-copy-after="copy:icon:0"' in dom,
+              re.search(r'data-probe-copy-after="[^"]*"', dom) or "after marker missing")
+
+        print("\nR) audit logs filter by a date range")
+        # The fixture's rows run from 2026-09-23 12:00 UTC backwards for 40
+        # hours, so this range still leaves entries to page over.
+        dom = browser.dom("theme=light&openlogs=1&logfrom=2026-09-22&logto=2026-09-23", 3600)
+        date_inputs = dom.count('type="date"')
+        check("the log toolbar has two date pickers",
+              date_inputs >= 2, f"{date_inputs} date input(s)")
+        check("the date driver actually ran",
+              'data-probe-log-date="set"' in dom, "driver marker missing")
+        check("the request carried both dates",
+              'data-probe-log-req="from=2026-09-22;to=2026-09-23"' in dom,
+              re.search(r'data-probe-log-req="[^"]*"', dom) or "no request marker")
+        check("the filtered log table still renders rows",
+              "logs-pager" in dom, "pager/total missing after filtering")
 
     except BrowserStalled as stalled:
         sys.exit(f"UI harness failed: {stalled}")

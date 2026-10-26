@@ -174,6 +174,21 @@ type HarborAuditLog struct {
 	Username  string `json:"username"`
 }
 
+// harborDateBound turns a YYYY-MM-DD log-filter date into the timestamp shape
+// Harbor's q range expects ("2020-04-09 02:36:00"). The picker means a local
+// calendar day while Harbor stores op_time in UTC, so the bound is converted;
+// `end` selects the last second of that day.
+func harborDateBound(raw string, end bool) (string, error) {
+	t, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(raw), time.Local)
+	if err != nil {
+		return "", err
+	}
+	if end {
+		t = t.Add(24*time.Hour - time.Second)
+	}
+	return t.UTC().Format("2006-01-02 15:04:05"), nil
+}
+
 func harborLogs(ctx context.Context, s *Session, params map[string]any) (any, error) {
 	if err := requireHarbor(s); err != nil {
 		return nil, err
@@ -199,6 +214,34 @@ func harborLogs(ctx context.Context, s *Session, params map[string]any) (any, er
 	}
 	if op := strings.TrimSpace(strParam(params, "operation")); op != "" {
 		filters = append(filters, "operation="+op)
+	}
+	// Date range: Harbor's q language has a native range form —
+	// op_time=[min~max] — so the filter (and the X-Total-Count that drives the
+	// pager) stays server-side. The picker speaks calendar days; Harbor stores
+	// op_time in UTC, hence the conversion in harborDateBound.
+	fromRaw := strings.TrimSpace(strParam(params, "from"))
+	toRaw := strings.TrimSpace(strParam(params, "to"))
+	if fromRaw != "" || toRaw != "" {
+		from := "1970-01-01 00:00:00"
+		to := "2999-12-31 23:59:59"
+		if fromRaw != "" {
+			v, err := harborDateBound(fromRaw, false)
+			if err != nil {
+				return nil, fmt.Errorf("invalid from date %q (expected YYYY-MM-DD)", fromRaw)
+			}
+			from = v
+		}
+		if toRaw != "" {
+			v, err := harborDateBound(toRaw, true)
+			if err != nil {
+				return nil, fmt.Errorf("invalid to date %q (expected YYYY-MM-DD)", toRaw)
+			}
+			to = v
+		}
+		if from > to {
+			return nil, errors.New("from must not be after to")
+		}
+		filters = append(filters, fmt.Sprintf("op_time=[%s~%s]", from, to))
 	}
 	if len(filters) > 0 {
 		q.Set("q", strings.Join(filters, ","))

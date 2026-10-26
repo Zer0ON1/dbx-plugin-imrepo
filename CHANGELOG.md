@@ -4,6 +4,26 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
+## Unreleased
+
+**An empty project no longer breaks the sidebar.** Harbor answers a project
+with no repositories with an empty list; the sidecar's paged reader returned a
+nil slice, which marshals to `null`, and the tree called `.map` on it. The
+render aborted at that project, so every project below it disappeared. List
+readers now always answer `[]`, and the tree falls back to an empty list if a
+backend ever answers with something else.
+
+**Pull is an icon, and copy feedback is visible.** The per-tag and per-artifact
+action columns showed the words "拉取命令" where every other action is an icon;
+the pull-command dialog's copy button showed a text label. Both are icons now.
+Copying flashes a green check and fades back to the copy icon.
+
+**Audit logs filter by date.** From/to calendar pickers join the scope and
+operation filters. The range goes to Harbor as its native
+`q=op_time=[min~max]` form — converted from the viewer's local days to UTC — so
+the pager's total stays exact. Audit logs are a Harbor-only feature, so this
+filter is Harbor-only too.
+
 ## 1.0.0
 
 **Release cadence.** Starting with 1.0.0, bug fixes are no longer shipped as

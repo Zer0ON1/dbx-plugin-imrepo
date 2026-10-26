@@ -121,6 +121,10 @@ BUDGET_ARTIFACTS = [
     for i in range(BUDGET_ARTIFACTS_PER_REPO)
 ]
 
+# Scenario F: a project with no repositories at all. The list walk must answer
+# [] — a nil slice marshals to null, and the UI calls .map on it.
+EMPTY_PROJECT = "empty"
+
 # Every artifact listing request, so a scenario can prove the walk skipped the
 # empty repositories and stopped at the budget.
 ARTIFACT_REQUESTS: list[str] = []
@@ -141,6 +145,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     # overview will walk.
     many_projects = False
     budget_mode = False
+    empty_project = False
+    no_projects = False
 
     def _send(self, obj, code=200, total=None):
         body = json.dumps(obj).encode()
@@ -160,7 +166,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if route == "/api/v2.0/ping":
             return self._send({})
         if route == "/api/v2.0/projects":
-            if self.budget_mode:
+            if self.no_projects:
+                projects = []
+            elif self.empty_project:
+                projects = [{
+                    "project_id": 3,
+                    "name": EMPTY_PROJECT,
+                    "public": True,
+                    "repo_count": 0,
+                    "creation_time": "2026-09-01T00:00:00Z",
+                }]
+            elif self.budget_mode:
                 projects = [{
                     "project_id": 2,
                     "name": BUDGET_PROJECT,
@@ -179,6 +195,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(rows, total=total)
         if route == f"/api/v2.0/projects/{BUDGET_PROJECT}/repositories":
             rows, total = page_of(BUDGET_REPOS, self.path)
+            return self._send(rows, total=total)
+        if route == f"/api/v2.0/projects/{EMPTY_PROJECT}/repositories":
+            rows, total = page_of([], self.path)
             return self._send(rows, total=total)
         if "/repositories/" in route and route.endswith("/artifacts"):
             ARTIFACT_REQUESTS.append(route)
@@ -340,6 +359,23 @@ def main() -> int:
               f"got {ov.get('totalSize')}")
         check("the overview reports the truncation", ov.get("truncated") is True,
               ov.get("truncated"))
+
+        print("\nF) an empty project answers [] rather than null")
+        Handler.empty_project = True
+        r = sc.call("harbor/repositories", {"connectionId": "h1", "project": EMPTY_PROJECT})
+        check("the empty repository listing succeeds", "error" not in r, r)
+        check("the result is an array", isinstance(r.get("result"), list),
+              r.get("result"))
+        check("the array is empty", r.get("result") == [], r.get("result"))
+
+        print("\nG) an empty project list answers [] rather than null")
+        Handler.empty_project = False
+        Handler.no_projects = True
+        r = sc.call("harbor/projects", {"connectionId": "h1"})
+        check("the empty project listing succeeds", "error" not in r, r)
+        check("the result is an array", isinstance(r.get("result"), list),
+              r.get("result"))
+        check("the array is empty", r.get("result") == [], r.get("result"))
     finally:
         srv.shutdown()
 

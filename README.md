@@ -175,10 +175,11 @@ npx dbx-plugin dev --path . --port 5190      # 本地调试宿主 → http://127
 | 测试 | 断言数 | 验证的是 |
 |---|---|---|
 | `test-settings-e2e.py` | 185 | 设置的持久化、校验与**实际生效**（后端行为）、V2 命名空间与总览、包布局 |
-| `test-ui-e2e.py` | 156 | 界面行为与策略可见性，含总览图表、架构徽章、连接切换、架构读取去重 |
+| `test-ui-e2e.py` | 171 | 界面行为与策略可见性，含总览图表、架构徽章、连接切换、空项目侧栏、拉取图标与日志日期筛选 |
 | `test-layers-e2e.py` | 23 | 逐层大小/指令/总量解析 |
 | `test-cleanup-e2e.py` | 21 | 孤立 Artifact 清理的安全规则 |
-| `test-harbor-paging-e2e.py` | 29 | Harbor 列表分页、artifact 全量读取与总览扫描预算 |
+| `test-harbor-paging-e2e.py` | 35 | Harbor 列表分页、空列表形状、artifact 全量读取与总览扫描预算 |
+| `test-logs-e2e.py` | 17 | 操作日志的日期范围过滤与分页透传 |
 | `test-retag-e2e.py` | 17 | 重命名 Tag 的真实请求序列 |
 | `test-mcp-e2e.py` | 51 | MCP 工具的参数校验与绕过安全规则的拒绝路径 |
 | `check-contrast.py` / `check-i18n.py` | 全量配色对 / 321 键×2 语言 | 配色对比度门禁、翻译门禁 |

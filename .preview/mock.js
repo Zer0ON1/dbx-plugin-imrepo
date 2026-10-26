@@ -84,6 +84,9 @@
   const PROJECTS = [
     { name: "ai", repo_count: 1 }, { name: "ai-agent", repo_count: 1 },
     { name: "checkout", repo_count: 5 }, { name: "payments", repo_count: 14 },
+    // No repositories: opening it used to crash the tree render (the listing
+    // was null, not []), which removed every project below it.
+    { name: "empty-project", repo_count: 0 },
     { name: "base", repo_count: 3 }, { name: "court", repo_count: 2 },
     { name: "ddf", repo_count: 6 }, { name: "sandbox", repo_count: 2 },
   ];
@@ -439,6 +442,16 @@
     scanner: { source: scannerSource, threshold, cacheSeconds: 300, autoScan: false, preventVul: false, scannerUuid: "" },
   };
 
+  // The headless shell has no usable clipboard, so writeText would either be
+  // missing or reject and the copy-feedback state would never be observable.
+  // Stub the success path; the real fallback is exercised in a normal browser.
+  try {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: () => Promise.resolve() },
+    });
+  } catch (_) { /* older engines: leave whatever the browser provides */ }
+
   window.dbxPlugin = {
     ready: Promise.resolve(),
     locale: "zh-CN",
@@ -530,6 +543,19 @@
         let rows = all;
         if (pid) rows = rows.filter((l) => l.project_id === pid);
         if (op) rows = rows.filter((l) => l.operation === op);
+        // Date range, inclusive, in the viewer's local days — the same shape
+        // the sidecar forwards to Harbor's q=op_time=[min~max].
+        const from = (p && p.from) || "";
+        const to = (p && p.to) || "";
+        if (from) {
+          const t0 = new Date(from + "T00:00:00").getTime();
+          rows = rows.filter((l) => new Date(l.time).getTime() >= t0);
+        }
+        if (to) {
+          const t1 = new Date(to + "T23:59:59.999").getTime();
+          rows = rows.filter((l) => new Date(l.time).getTime() <= t1);
+        }
+        document.documentElement.dataset.probeLogReq = "from=" + from + ";to=" + to;
         const size = Number((p && p.pageSize) || 50);
         const page = Number((p && p.page) || 1);
         return {
@@ -565,9 +591,19 @@
         // Answering with the whole fixture for every project would make a
         // search match the same repository under every folder.
         const project = (p && p.project) || "";
+        if (project === "empty-project" && params.get("nullrepos")) {
+          // Deliberately the broken shape: a nil Go slice used to marshal to
+          // null. The UI must survive it even if a backend ever regresses.
+          return null;
+        }
         return REPOS
           .filter((r) => String(r.full_name || "").startsWith(project + "/"))
           .map((r) => JSON.parse(JSON.stringify(r)));
+      }
+      if (method === "harbor/images" && (p && p.project) === "empty-project") {
+        return { project: "empty-project", repositoryCount: 0, imageCount: 0,
+                 tagCount: 0, totalSize: 0, images: [], repositories: [],
+                 truncated: false, repositoryErrors: [] };
       }
       // v2 namespace browsing: repository list and namespace overview derive from
       // the RPC's namespace argument (the URL query `namespace` is unrelated).
@@ -632,10 +668,13 @@
         setTimeout(openRepo, 500);
       }
     } else {
-      setTimeout(() => byText("payments")?.click(), 150);
+      // ?emptyproject=1 opens the project with no repositories; the tree below
+      // it must survive the empty listing.
+      const startProject = params.get("emptyproject") ? "empty-project" : "payments";
+      setTimeout(() => byText(startProject)?.click(), 150);
       // ?overview=1 keeps the project selected (shows the project-wide image
       // overview) instead of drilling into one repository.
-      if (!params.get("overview")) {
+      if (!params.get("overview") && !params.get("emptyproject")) {
         setTimeout(() => byText("ledger-api", "lvl2")?.click(), 500);
       }
     }
@@ -843,6 +882,30 @@
         }, 900);
       }
     }, 800);
+    // Date filters: set the picker the way a person would (input + change), one
+    // at a time, because each change re-renders the dialog and replaces the
+    // second input.
+    const logFrom = params.get("logfrom");
+    const logTo = params.get("logto");
+    if (logFrom || logTo) {
+      setTimeout(() => {
+        const fromInput = document.querySelector("#logsBody .logs-bar input[type=date]");
+        if (!fromInput) { document.documentElement.dataset.probeLogDate = "missing"; return; }
+        if (logFrom) {
+          fromInput.value = logFrom;
+          fromInput.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        setTimeout(() => {
+          const dates = document.querySelectorAll("#logsBody .logs-bar input[type=date]");
+          if (dates.length < 2) { document.documentElement.dataset.probeLogDate = "missing-to"; return; }
+          if (logTo) {
+            dates[1].value = logTo;
+            dates[1].dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          document.documentElement.dataset.probeLogDate = "set";
+        }, 300);
+      }, 1600);
+    }
     if (params.get("newproject")) setTimeout(() => document.getElementById("btnNewProject")?.click(), 800);
     if (openModal) setTimeout(() => {
       // Cleanup lives in the content toolbar, not in a row.
@@ -908,14 +971,35 @@
         }
         return;
       }
-      // Table: pull is a labelled button, the rest are icon buttons in this order.
-      if (openModal === "pull") {
-        document.querySelector("tbody tr .copy-btn")?.click();
-        return;
-      }
+      // Table actions are all icon buttons now: pull, retag, layers, vuln, delete.
       const btns = document.querySelector("tbody tr")?.querySelectorAll(".icon-btn");
       if (!btns || !btns.length) return;
-      const order = { retag: 0, layers: 1, vuln: 2 }; // per-row action order
+      if (openModal === "pull") {
+        btns[0].click();
+        if (params.get("copytest")) {
+          // Click the dialog's copy button and record the feedback state before
+          // the timer fades it back. Virtual time is budgeted so this lands
+          // while the check is still showing.
+          setTimeout(() => {
+            const btn = document.querySelector("#pullBody .copy-btn");
+            if (!btn) { document.documentElement.dataset.probeCopy = "missing"; return; }
+            btn.click();
+            const snapshot = (key) => {
+              document.documentElement.dataset[key] = [
+                btn.classList.contains("copied") ? "copied" : "copy",
+                btn.querySelector("svg") ? "icon" : "text",
+                String((btn.textContent || "").trim().length),
+              ].join(":");
+            };
+            setTimeout(() => snapshot("probeCopy"), 120);
+            // Later than the 1.4s hold + 0.26s fade, so this proves the icon
+            // came back rather than staying on the check forever.
+            setTimeout(() => snapshot("probeCopyAfter"), 2000);
+          }, 200);
+        }
+        return;
+      }
+      const order = { retag: 1, layers: 2, vuln: 3 }; // per-row action order
       if (openModal in order) btns[Math.min(order[openModal], btns.length - 1)].click();
       else if (openModal === "delete") {
         btns[btns.length - 1].click();

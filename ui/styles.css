@@ -473,7 +473,13 @@ html, body {
   white-space: nowrap; overflow-x: auto; overflow-y: hidden; padding-bottom: 2px;
 }
 .cmd-row-ref .cmd-text { font-weight: 600; }
-.cmd-row .copy-btn { flex-shrink: 0; min-width: 56px; }
+.cmd-row .copy-btn { flex-shrink: 0; width: 28px; height: 28px; justify-content: center; }
+/* Copy feedback: the icon itself changes (copy → check) and turns green; the
+   check then fades out before the copy icon comes back, so the swap reads as a
+   completed action rather than a flicker. */
+.copy-btn svg { transition: opacity .18s ease; }
+.copy-btn.copied { color: var(--im-success); }
+.copy-btn.fading svg { opacity: 0; transition: opacity .26s ease; }
 
 /* ---------- Project image overview ---------- */
 /* The repository name is the way into the repository view. */
@@ -594,6 +600,8 @@ html, body {
   font-family: inherit; font-size: 13px; padding: 0 8px; height: 32px;
 }
 .set-input { width: 96px; font-variant-numeric: tabular-nums; }
+/* A date input needs room for the calendar affordance as well as the value. */
+.logs-date { width: 132px; }
 .set-select { min-width: 190px; }
 .set-textarea {
   width: 260px; height: auto; min-height: 62px; padding: 6px 8px;

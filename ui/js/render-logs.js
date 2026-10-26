@@ -16,6 +16,7 @@
     IM.$("#logsModal").hidden = false;
     IM.state.logs = {
       page: 1, op: "", scope: IM.state.current.project || "",
+      from: "", to: "",
       rows: [], total: 0, pageSize: 50,
     };
     await IM.renderLogs();
@@ -46,7 +47,24 @@
     IM.LOG_OPERATIONS.forEach((op) => { const o = IM.el("option", "", op); o.value = op; opSel.appendChild(o); });
     opSel.value = st.op;
     opSel.addEventListener("change", () => { st.op = opSel.value; st.page = 1; IM.renderLogs(); });
-    bar.append(IM.el("span", "k", IM.t("logs.scope")), scopeSel, IM.el("span", "k", IM.t("logs.operation")), opSel);
+
+    // Date range: calendar days, inclusive on both ends. Harbor filters these
+    // server-side (q=op_time=[min~max]), so the pager's total stays honest.
+    const fromInput = IM.el("input", "set-input logs-date");
+    fromInput.type = "date";
+    fromInput.value = st.from;
+    fromInput.title = IM.t("logs.from");
+    fromInput.addEventListener("change", () => { st.from = fromInput.value; st.page = 1; IM.renderLogs(); });
+    const toInput = IM.el("input", "set-input logs-date");
+    toInput.type = "date";
+    toInput.value = st.to;
+    toInput.title = IM.t("logs.to");
+    toInput.addEventListener("change", () => { st.to = toInput.value; st.page = 1; IM.renderLogs(); });
+
+    bar.append(IM.el("span", "k", IM.t("logs.scope")), scopeSel,
+      IM.el("span", "k", IM.t("logs.operation")), opSel,
+      IM.el("span", "k", IM.t("logs.from")), fromInput,
+      IM.el("span", "k", IM.t("logs.to")), toInput);
     body.appendChild(bar);
     // loadingHTML() is a string; appendChild would throw on it.
     body.insertAdjacentHTML("beforeend", IM.loadingHTML());
@@ -54,6 +72,8 @@
       const params = { page: st.page, pageSize: st.pageSize };
       if (st.scope) params.project = st.scope;
       if (st.op) params.operation = st.op;
+      if (st.from) params.from = st.from;
+      if (st.to) params.to = st.to;
       const r = await IM.invoke("harbor/logs", params);
       body.innerHTML = "";
       body.appendChild(bar);
