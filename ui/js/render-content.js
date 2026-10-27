@@ -95,8 +95,11 @@
       // repository whose images are all untagged therefore offers no pull.
       if (rp.latestTag) {
         acts.appendChild(IM.iconBtn(IM.t("pull"), "pull", () => IM.openPull(project + "/" + rp.repository, rp.latestTag)));
+        acts.appendChild(IM.downloadBtn(project + "/" + rp.repository, rp.latestTag, rp.latestTag));
         acts.appendChild(IM.iconBtn(IM.t("vuln"), "shield",
           () => IM.openVuln(project + "/" + rp.repository, rp.latestTag, rp.latestDigest)));
+      } else if (rp.latestDigest) {
+        acts.appendChild(IM.downloadBtn(project + "/" + rp.repository, rp.latestDigest, rp.latestDigest));
       } else {
         const none = IM.iconBtn(IM.t("pull"), "pull", () => IM.toast(IM.t("imagesNoTagToPull"), "warn"), "blocked");
         none.classList.add("blocked");
@@ -377,7 +380,7 @@
     const table = IM.el("table", "table");
     const thead = IM.el("thead");
     const hr = IM.el("tr");
-    [IM.t("tag"), IM.t("digest"), IM.t("pull"), IM.t("retag"), IM.t("layers"), IM.t("vuln"), IM.t("delete")].forEach((h) => hr.appendChild(IM.el("th", "", h)));
+    [IM.t("tag"), IM.t("digest"), IM.t("pull"), IM.t("retag"), IM.t("layers"), IM.t("vuln"), IM.t("download"), IM.t("delete")].forEach((h) => hr.appendChild(IM.el("th", "", h)));
     thead.appendChild(hr);
     table.appendChild(thead);
     const tbody = IM.el("tbody");
@@ -404,9 +407,11 @@
       tdLayers.appendChild(IM.iconBtn(IM.t("layers"), "layers", () => IM.openLayers(repo, tg)));
       const tdVuln = IM.el("td");
       tdVuln.appendChild(IM.iconBtn(IM.t("vuln"), "shield", () => IM.openVuln(repo, tg, null)));
+      const tdDownload = IM.el("td");
+      tdDownload.appendChild(IM.downloadBtn(repo, tg, tg));
       const tdDel = IM.el("td");
       tdDel.appendChild(IM.deleteTagBtn(repo, tg, null));
-      tr.append(tdTag, tdDigest, tdPull, tdRetag, tdLayers, tdVuln, tdDel);
+      tr.append(tdTag, tdDigest, tdPull, tdRetag, tdLayers, tdVuln, tdDownload, tdDel);
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -427,7 +432,7 @@
     const table = IM.el("table", "table");
     const thead = IM.el("thead");
     const hr = IM.el("tr");
-    [IM.t("tag"), IM.t("digest"), IM.t("size"), IM.t("pushed"), IM.t("pull"), IM.t("retag"), IM.t("layers"), IM.t("vuln"), IM.t("delete")].forEach((h) => hr.appendChild(IM.el("th", "", h)));
+    [IM.t("tag"), IM.t("digest"), IM.t("size"), IM.t("pushed"), IM.t("pull"), IM.t("retag"), IM.t("layers"), IM.t("vuln"), IM.t("download"), IM.t("delete")].forEach((h) => hr.appendChild(IM.el("th", "", h)));
     thead.appendChild(hr);
     table.appendChild(thead);
     const tbody = IM.el("tbody");
@@ -479,12 +484,16 @@
       tdLayers.appendChild(IM.iconBtn(IM.t("layers"), "layers", () => IM.openLayers(project + "/" + repo, ref0)));
       const tdVuln = IM.el("td");
       tdVuln.appendChild(IM.iconBtn(IM.t("vuln"), "shield", () => IM.openVuln(project + "/" + repo, ref0, a.digest)));
+      const tdDownload = IM.el("td");
+      // An untagged artifact is still downloadable by digest; the archive's
+      // RepoTag then falls back to a digest-derived tag in the backend.
+      tdDownload.appendChild(IM.downloadBtn(project + "/" + repo, names[0] || a.digest, names[0] || a.digest));
       const tdDel = IM.el("td");
       if (names.length) {
         tdDel.appendChild(IM.deleteTagBtn(project + "/" + repo, IM.deletableTag(names, names[0]), a.digest,
           inWindow.has(a.digest) ? windowReason : ""));
       }
-      tr.append(tdTag, tdDigest, tdSize, tdPush, tdPull, tdRetag, tdLayers, tdVuln, tdDel);
+      tr.append(tdTag, tdDigest, tdSize, tdPush, tdPull, tdRetag, tdLayers, tdVuln, tdDownload, tdDel);
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);

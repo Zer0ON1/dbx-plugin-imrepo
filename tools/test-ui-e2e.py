@@ -862,6 +862,143 @@ def main() -> int:
         check("the filtered log table still renders rows",
               "logs-pager" in dom, "pager/total missing after filtering")
 
+        print("\nS) image archives: upload a local .tar and download a repository image")
+        dom = browser.dom("theme=light&probe=1&transfer=upload", 9000)
+        reqs = probe_requests(dom)
+        check("the upload dialog opens from the toolbar",
+              'id="uploadModal"' in dom and "上传本地镜像包" in dom, "dialog missing")
+        check("the archive bytes go to the sidecar in chunks",
+              "transfer/uploadBegin" in reqs and "transfer/uploadChunk" in reqs
+              and "transfer/uploadEnd" in reqs, reqs[-12:])
+        check("the upload chunk is the bridge-safe 1 MiB size",
+              'data-probe-upload-chunk-bytes="1048576"' in dom,
+              re.search(r'data-probe-upload-chunk-bytes="[^"]*"', dom) or "chunk marker missing")
+        check("a file without a .tar extension is still accepted",
+              "ledger-api.bin" in dom, "the picker filtered on the extension")
+        file_input = re.search(r'<input[^>]*id="uploadFileInput"[^>]*>', dom)
+        check("the file picker no longer filters by extension",
+              file_input is not None and "accept=" not in file_input.group(0),
+              file_input.group(0) if file_input else "input missing")
+        def fact(name):
+            m = re.search(rf'id="{name}"[^>]*>([^<]*)<', dom)
+            return m.group(1) if m else None
+
+        check("the parsed image is offered with its source tag",
+              "ledger-api:v9" in dom, "parsed image missing")
+        check("the source reference is split into site/project/repo/version",
+              fact("uploadSourceSite") == "docker.example.com"
+              and fact("uploadSourceProject") == "payments"
+              and fact("uploadSourceRepo") == "ledger-api"
+              and fact("uploadSourceVersion") == "v9",
+              [fact("uploadSourceSite"), fact("uploadSourceProject"),
+               fact("uploadSourceRepo"), fact("uploadSourceVersion")])
+        check("the source facts show the format, layers and size",
+              fact("uploadSourceFormat") == "OCI"
+              and fact("uploadSourceLayers") == "4"
+              and fact("uploadSourceSize") == "512 MB",
+              [fact("uploadSourceFormat"), fact("uploadSourceLayers"), fact("uploadSourceSize")])
+        check("a multi-arch archive exposes an ARCH selector",
+              'id="uploadArch"' in dom and "linux/amd64" in dom and "linux/arm64" in dom,
+              "ARCH selector missing")
+        check("the ARCH selector can still publish the whole index",
+              "全部平台" in dom, "the all-platforms choice is missing")
+        check("the target project and repository are read-only current-repo values",
+              fact("uploadTargetProject") == "payments"
+              and fact("uploadTargetRepo") == "ledger-api"
+              and 'id="uploadRepo"' not in dom and 'id="uploadProject"' not in dom,
+              [fact("uploadTargetProject"), fact("uploadTargetRepo")])
+        check("the source tag is the default destination tag",
+              'data-probe-upload-push="payments/ledger-api@v9"' in dom,
+              re.search(r'data-probe-upload-push="[^"]*"', dom) or "push marker missing")
+        check("the default ARCH is linux/amd64",
+              'data-probe-upload-platform="linux/amd64"' in dom,
+              re.search(r'data-probe-upload-platform="[^"]*"', dom) or "platform marker missing")
+        check("the dialog previews the full destination reference",
+              "目标镜像：harbor.example.com/payments/ledger-api:v9" in dom,
+              "the full reference preview is missing")
+        check("the push request carries the destination",
+              'data-probe-upload-push="payments/ledger-api@v9"' in dom,
+              re.search(r'data-probe-upload-push="[^"]*"', dom) or "push marker missing")
+        check("upload closes without opening the pull dialog",
+              re.search(r'id="pullModal"[^>]*hidden', dom) is not None,
+              "the pull dialog was opened after upload")
+        check("the dialog closes after a successful upload",
+              re.search(r'id="uploadModal"[^>]*hidden', dom) is not None, "modal still open")
+        check("the upload raised no uncaught error", not js_errors(dom), js_errors(dom))
+
+        dom = browser.dom("theme=light&probe=1&transfer=upload&transfertag=manual-tag", 9000)
+        check("editing the tag publishes under the new tag",
+              'data-probe-upload-push="payments/ledger-api@manual-tag"' in dom,
+              re.search(r'data-probe-upload-push="[^"]*"', dom) or "push marker missing")
+        check("the preview follows the edited tag",
+              "目标镜像：harbor.example.com/payments/ledger-api:manual-tag" in dom,
+              "the preview still uses the source tag")
+        dom = browser.dom("theme=light&probe=1&transfer=upload&transferarch=linux/arm64", 9000)
+        check("choosing another ARCH pushes that platform",
+              'data-probe-upload-platform="linux/arm64"' in dom,
+              re.search(r'data-probe-upload-platform="[^"]*"', dom) or "platform marker missing")
+        check("the ARCH override leaves the target tag unchanged",
+              'data-probe-upload-push="payments/ledger-api@v9"' in dom,
+              re.search(r'data-probe-upload-push="[^"]*"', dom) or "push marker missing")
+
+        dom = browser.dom("theme=light&probe=1&transfer=upload&norepo=1", 3000)
+        check("upload without a selected repository is refused",
+              "请先在左侧选择一个仓库" in dom
+              and re.search(r'id="uploadModal"[^>]*hidden', dom) is not None,
+              "the dialog opened without a target repository")
+        check("...and no upload RPC is sent",
+              not any(r.startswith("transfer/uploadBegin") for r in probe_requests(dom)),
+              probe_requests(dom)[-8:])
+
+        dom = browser.dom("theme=light&probe=1&transfer=upload&slowparse=1&maskduring=upload", 9000)
+        check("a backdrop click while uploading is refused",
+              'data-probe-mask-blocked="uploadModal"' in dom,
+              re.search(r'data-probe-mask-blocked="[^"]*"', dom) or "mask guard did not run")
+        check("...and the upload still completes",
+              'data-probe-upload-push="payments/ledger-api@v9"' in dom,
+              re.search(r'data-probe-upload-push="[^"]*"', dom) or "upload was interrupted")
+
+        dom = browser.dom("theme=light&probe=1&transfer=download&slowwrite=1&maskduring=download", 9000)
+        check("a backdrop click while saving is refused",
+              'data-probe-mask-blocked="downloadModal"' in dom,
+              re.search(r'data-probe-mask-blocked="[^"]*"', dom) or "mask guard did not run")
+        check("...and the file still finishes saving",
+              'data-probe-save="done"' in dom,
+              "the save was interrupted by the backdrop click")
+
+        dom = browser.dom("theme=light&probe=1&transfer=download", 9000)
+        reqs = probe_requests(dom)
+        check("the download dialog opens from a tag row",
+              'id="downloadModal"' in dom and "下载镜像包" in dom, "dialog missing")
+        check("the plan request names the tag",
+              any(r.startswith("transfer/exportPlan") for r in reqs), reqs[-12:])
+        check("both platforms are offered",
+              "linux/amd64" in dom and "linux/arm64" in dom, "platform picker missing")
+        check("a Docker archive cannot choose all platforms",
+              "全部平台" not in dom.split('id="downloadPlatform"')[-1].split("</select>")[0],
+              "the all-platforms option leaked into the Docker format")
+        check("the export request defaults to docker/linux-amd64/.tar",
+              'data-probe-export="docker:linux/amd64:tar"' in dom,
+              re.search(r'data-probe-export="[^"]*"', dom) or "export marker missing")
+        check("the archive was written through the host file handle",
+              'data-probe-save="done"' in dom, "the host save path was not used")
+        check("every archive byte was written",
+              'data-probe-save-bytes="19"' in dom,
+              re.search(r'data-probe-save-bytes="[^"]*"', dom) or "byte count missing")
+        check("saving used the bridge's binary channel, not JSON/base64",
+              'data-probe-save-binary="1"' in dom,
+              re.search(r'data-probe-save-binary="[^"]*"', dom) or "binary marker missing")
+        check("the dialog closes after the download",
+              re.search(r'id="downloadModal"[^>]*hidden', dom) is not None, "modal still open")
+        check("the download raised no uncaught error", not js_errors(dom), js_errors(dom))
+
+        dom = browser.dom("theme=light&probe=1&transfer=download&transferfmt=oci", 9000)
+        check("the OCI layout offers every platform",
+              "全部平台" in dom, "all-platforms option missing for OCI")
+        check("the OCI export requests the whole index",
+              'data-probe-export="oci:all:tar"' in dom,
+              re.search(r'data-probe-export="[^"]*"', dom) or "export marker missing")
+
     except BrowserStalled as stalled:
         sys.exit(f"UI harness failed: {stalled}")
     finally:

@@ -452,11 +452,65 @@
     });
   } catch (_) { /* older engines: leave whatever the browser provides */ }
 
+  /* --- transfer fixtures ------------------------------------------------ */
+  // A fake archive whose bytes only have to be streamed through the real UI
+  // code; the mock sidecar below answers the RPCs with a parsed image. Saving
+  // records the chunks so the UI test can prove the host file path was used.
+  const ARCHIVE_BYTES = new TextEncoder().encode("IMREPO-TEST-ARCHIVE");
+  const SAVE_CHUNKS = [];
+  let uploadParsed = false;
+  let uploadPushed = false;
+  let uploadStatusCalls = 0;
+  let uploadPushRepo = "payments/ledger-api";
+  let uploadPushTag = "v9";
+
   window.dbxPlugin = {
     ready: Promise.resolve(),
     locale: "zh-CN",
     context: { connectionId: "preview-conn", connection: { id: "preview-conn" } },
     theme: { appearance: theme, tokens: HOST_TOKENS },
+    capabilities: { fileTransfer: { pick: true, beginSave: true, read: true, write: true } },
+    fileTransfer: {
+      async pick() {
+        return { files: [{
+          handleId: "preview-file-1", name: "ledger-api.bin",
+          size: ARCHIVE_BYTES.length, contentType: "application/octet-stream",
+        }] };
+      },
+      async read(handleId, offset, length) {
+        const part = ARCHIVE_BYTES.slice(offset, offset + length);
+        let text = "";
+        for (let i = 0; i < part.length; i++) text += String.fromCharCode(part[i]);
+        return {
+          dataBase64: btoa(text), length: part.length,
+          eof: offset + part.length >= ARCHIVE_BYTES.length,
+        };
+      },
+      async beginSave(options) {
+        SAVE_CHUNKS.length = 0;
+        window.__probeSaveName = (options && options.name) || "";
+        return { handleId: "preview-save-1", chunkBytes: 4 * 1024 * 1024 };
+      },
+      async write(handleId, offset, data) {
+        // A slow write keeps the dialog busy long enough for the mask-click
+        // regression test to land while a save is in flight.
+        if (params.get("slowwrite")) await new Promise((r) => setTimeout(r, 1200));
+        // The real bridge accepts a base64 string or a Uint8Array and chooses
+        // the binary channel for the latter. Record which one was used: the
+        // UI must not send a 4 MiB base64 string through the 2 MiB JSON limit.
+        const binary = typeof data !== "string";
+        const length = binary ? data.length : atob(data).length;
+        document.documentElement.dataset.probeSaveBinary = binary ? "1" : "0";
+        SAVE_CHUNKS.push({ offset, length });
+        return { written: length, nextOffset: offset + length };
+      },
+      async finish() {
+        document.documentElement.dataset.probeSave = "done";
+        document.documentElement.dataset.probeSaveBytes = String(
+          SAVE_CHUNKS.reduce((n, c) => n + c.length, 0));
+      },
+      async cancel() {},
+    },
     onContext(cb) { ctxCb = cb; },
     invoke: async (method, p) => {
       // One tag's architectures are identified by repository AND tag, so the log
@@ -637,6 +691,115 @@
                  digest: "sha256:" + ref.padEnd(8, "0") + "c0ffee".repeat(10),
                  arches: ["amd64", "arm64"] };
       }
+      /* --- image archive transfer -------------------------------------- */
+      if (method === "transfer/uploadBegin") {
+        uploadParsed = false;
+        uploadPushed = false;
+        uploadStatusCalls = 0;
+        document.documentElement.dataset.probeUploadChunkBytes = "1048576";
+        uploadPushRepo = "payments/ledger-api";
+        uploadPushTag = "v9";
+        return { id: "preview-upload-1", name: (p && p.name) || "image", chunkBytes: 1024 * 1024 };
+      }
+      if (method === "transfer/uploadChunk") {
+        return { received: Number((p && p.offset) || 0) + atob((p && p.data) || "").length };
+      }
+      if (method === "transfer/uploadEnd") {
+        uploadParsed = true;
+        uploadStatusCalls = 0;
+        return { id: "preview-upload-1", state: "parsing" };
+      }
+      if (method === "transfer/uploadStatus") {
+        uploadStatusCalls++;
+        const stillParsing = params.get("slowparse") && uploadParsed && uploadStatusCalls < 6;
+        const ready = uploadParsed && !stillParsing;
+        const image = {
+          index: 0, format: "oci",
+          refs: ["docker.example.com/payments/ledger-api:v9"],
+          suggestedRepository: "payments/ledger-api", suggestedTag: "v9",
+          mediaType: "application/vnd.docker.distribution.manifest.v2+json",
+          digest: "sha256:" + "a".repeat(64),
+          configDigest: "sha256:" + "b".repeat(64),
+          layers: 4, size: 512 * MB,
+          platforms: [
+            { os: "linux", architecture: "amd64" },
+            { os: "linux", architecture: "arm64" },
+          ],
+        };
+        return {
+          id: "preview-upload-1", name: "ledger-api.tar",
+          state: ready ? "ready" : "parsing", error: "",
+          archive: {
+            format: "oci", compressed: false, size: ARCHIVE_BYTES.length,
+            images: ready ? [image, Object.assign({}, image, {
+              index: 1, refs: ["docker.example.com/payments/worker:v2"], suggestedRepository: "payments/worker",
+              suggestedTag: "v2", size: 256 * MB, layers: 2,
+            })] : [],
+          },
+          push: uploadPushed
+            ? { state: "done", phase: "done", done: 512 * MB, total: 512 * MB,
+                blobsDone: 5, blobsTotal: 5,
+                repository: uploadPushRepo, tag: uploadPushTag }
+            : { state: "idle" },
+        };
+      }
+      if (method === "transfer/uploadPush") {
+        uploadPushed = true;
+        uploadPushRepo = (p && p.repository) || "";
+        uploadPushTag = (p && p.tag) || "";
+        document.documentElement.dataset.probeUploadPush =
+          uploadPushRepo + "@" + uploadPushTag;
+        document.documentElement.dataset.probeUploadPlatform = (p && p.platform) || "";
+        return { started: true };
+      }
+      if (method === "transfer/uploadClose") {
+        uploadParsed = false;
+        uploadPushed = false;
+        uploadStatusCalls = 0;
+        return { ok: true };
+      }
+      if (method === "transfer/exportPlan") {
+        return {
+          repository: (p && p.repository) || "",
+          reference: (p && p.reference) || "",
+          tag: (p && p.reference) === "sha256:" + "a".repeat(64) ? "" : ((p && p.reference) || ""),
+          digest: "sha256:" + "a".repeat(64),
+          mediaType: "application/vnd.oci.image.index.v1+json",
+          isIndex: true, isImage: true, size: 512 * MB,
+          platforms: [
+            { os: "linux", architecture: "amd64", digest: "sha256:" + "c".repeat(64), size: 256 * MB },
+            { os: "linux", architecture: "arm64", digest: "sha256:" + "d".repeat(64), size: 256 * MB },
+          ],
+        };
+      }
+      if (method === "transfer/exportBegin") {
+        document.documentElement.dataset.probeExport =
+          ((p && p.format) || "") + ":" + ((p && p.platform) ? p.platform : "all")
+          + ":" + (((p && p.gzip) ? "gz" : "tar"));
+        return { id: "preview-export-1", name: "ledger-api-v9.tar.gz", state: "preparing", size: 0 };
+      }
+      if (method === "transfer/exportStatus") {
+        return {
+          id: "preview-export-1", name: "ledger-api-v9.tar.gz", state: "ready",
+          error: "", done: ARCHIVE_BYTES.length, total: ARCHIVE_BYTES.length,
+          size: ARCHIVE_BYTES.length, format: "docker", gzip: false,
+          platform: "", tag: "v9",
+        };
+      }
+      if (method === "transfer/exportChunk") {
+        const offset = Number((p && p.offset) || 0);
+        const length = Number((p && p.length) || ARCHIVE_BYTES.length);
+        const part = ARCHIVE_BYTES.slice(offset, offset + length);
+        let text = "";
+        for (let i = 0; i < part.length; i++) text += String.fromCharCode(part[i]);
+        return {
+          data: btoa(text), offset, length: part.length,
+          eof: offset + part.length >= ARCHIVE_BYTES.length,
+          size: ARCHIVE_BYTES.length,
+        };
+      }
+      if (method === "transfer/exportClose") return { ok: true };
+
       if (!(method in RESPONSES)) throw new Error("no mock for " + method);
       return JSON.parse(JSON.stringify(RESPONSES[method]));
     },
@@ -654,6 +817,9 @@
     const drivingSearch = params.get("search") !== null;
     if (drivingSearch) {
       // nothing: the ?search= driver below types into the box
+    } else if (params.get("norepo")) {
+      // Leave the workbench without a repository selected; the upload dialog
+      // is scoped to the current repository and must refuse to open.
     } else if (mode === "docker") {
       // docker-v2 tree: namespaces are folders. Open the first namespace, then
       // its first repository (poll — the repo row appears once the namespace's
@@ -679,6 +845,64 @@
       }
     }
     if (false) setTimeout(() => document.getElementById("btnCards")?.click(), 800); // cards view removed in v1.5.0
+    const transferDir = params.get("transfer");
+    const maskDuring = params.get("maskduring");
+    if (maskDuring === "upload") {
+      setTimeout(() => document.getElementById("uploadModal")?.click(), 1600);
+    }
+    if (maskDuring === "download") {
+      setTimeout(() => document.getElementById("downloadModal")?.click(), 2200);
+    }
+    if (transferDir === "upload") {
+      // Open the dialog, let the mock file handle stream through the real
+      // upload code, then press Upload once parsing has enabled the button.
+      setTimeout(() => document.getElementById("btnUpload")?.click(), 800);
+      setTimeout(() => document.getElementById("btnPickArchive")?.click(), 1100);
+      const pushWhenReady = () => {
+        if (document.documentElement.dataset.probeUploadPush) return;
+        const button = document.getElementById("btnUploadPush");
+        if (button && !button.disabled) {
+          const manualTag = params.get("transfertag");
+          if (manualTag) {
+            const tagInput = document.getElementById("uploadTag");
+            tagInput.value = manualTag;
+            tagInput.dispatchEvent(new Event("input"));
+          }
+          const manualArch = params.get("transferarch");
+          if (manualArch) {
+            const archSelect = document.getElementById("uploadArch");
+            if (archSelect) {
+              archSelect.value = manualArch;
+              archSelect.dispatchEvent(new Event("change"));
+            }
+          }
+          button.click();
+        } else setTimeout(pushWhenReady, 120);
+      };
+      setTimeout(pushWhenReady, 1800);
+    }
+    if (transferDir === "download") {
+      // The default driver opens ledger-api's tag table first; its download
+      // action is the first icon carrying data-action="download".
+      setTimeout(() => {
+        const download = document.querySelector('#contentBody [data-action="download"]');
+        if (download) download.click();
+      }, 1400);
+      const startWhenReady = () => {
+        if (document.documentElement.dataset.probeExport) return;
+        const button = document.getElementById("btnDownloadStart");
+        if (button && !button.disabled) {
+          const format = params.get("transferfmt");
+          if (format) {
+            const select = document.getElementById("downloadFormat");
+            select.value = format;
+            select.dispatchEvent(new Event("change"));
+          }
+          button.click();
+        } else setTimeout(startWhenReady, 120);
+      };
+      setTimeout(startWhenReady, 1900);
+    }
     if (raceRepo) {
       // Click the slow repository, then a fast one while it is still loading.
       setTimeout(() => byText(raceRepo, "lvl2")?.click(), 700);

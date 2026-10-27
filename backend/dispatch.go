@@ -103,6 +103,22 @@ var sessionMethods = map[string]sessionHandler{
 	"registry/retag":        func(ctx context.Context, s *Session, p map[string]any) (any, error) { return retag(ctx, s, p) },
 	"registry/delete":       registryDelete,
 
+	// ---- image archives (.tar / .tar.gz) -----------------------------------
+	// Upload streams the file into the sidecar in chunks, indexes it, then
+	// pushes the selected image; export is the same path in reverse. Both are
+	// OCI-standard, so every registry type in the manifest can use them.
+	"transfer/uploadBegin":  uploadBegin,
+	"transfer/uploadChunk":  uploadChunk,
+	"transfer/uploadEnd":    uploadEnd,
+	"transfer/uploadStatus": uploadStatus,
+	"transfer/uploadPush":   uploadPush,
+	"transfer/uploadClose":  uploadClose,
+	"transfer/exportPlan":   transferExportPlan,
+	"transfer/exportBegin":  transferExportBegin,
+	"transfer/exportStatus": transferExportStatus,
+	"transfer/exportChunk":  transferExportChunk,
+	"transfer/exportClose":  transferExportClose,
+
 	// ---- Harbor REST API v2.0 ----------------------------------------------
 	"harbor/projects":        func(ctx context.Context, s *Session, _ map[string]any) (any, error) { return s.Harbor.Projects(ctx) },
 	"harbor/repositories":    harborRepositories,

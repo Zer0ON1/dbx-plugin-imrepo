@@ -67,6 +67,11 @@
    * so a response still in flight for the old host is dropped on arrival.
    */
   IM.resetConnectionView = function resetConnectionView() {
+    // A transfer dialog is bound to the registry it was opened on. Leaving it
+    // open across a switch would let its next click run against the new
+    // connection (and the sidecar would rightly refuse the old transfer id).
+    if (IM.closeUpload) IM.closeUpload(true);
+    if (IM.closeDownload) IM.closeDownload(true);
     IM.invalidate();               // repository / tag listings
     IM.archCache.clear();          // tag architectures (keyed per connection)
     IM.archInflight.clear();
@@ -179,6 +184,12 @@
     IM.$("#btnCreateProjectConfirm").addEventListener("click", IM.submitCreateProject);
     IM.$("#btnCleanup").addEventListener("click", IM.openCleanup);
     IM.$("#btnCleanupConfirm").addEventListener("click", IM.runCleanup);
+    IM.$("#btnUpload").addEventListener("click", IM.openUpload);
+    IM.$("#btnPickArchive").addEventListener("click", IM.pickArchive);
+    IM.$("#btnUploadPush").addEventListener("click", IM.pushArchive);
+    IM.$("#btnUploadCancel").addEventListener("click", () => IM.closeUpload());
+    IM.$("#btnDownloadStart").addEventListener("click", IM.startDownload);
+    IM.$("#btnDownloadCancel").addEventListener("click", () => IM.closeDownload());
     let searchTimer = null;
     IM.$("#searchInput").addEventListener("input", (e) => {
       IM.state.search = e.target.value;
@@ -247,6 +258,28 @@
     // Closing a dialog also drops its transient state, so a cancelled edit never
     // re-appears the next time the dialog is opened.
     const closeModal = (id) => {
+      // Transfer dialogs own temp files on the sidecar; hiding them without
+      // calling their close path would leak the archive until the TTL sweep.
+      if (id === "uploadModal") {
+        // A transfer in flight must not be cancelled by a stray click on the
+        // backdrop; the explicit Cancel button is the way out.
+        const upload = IM.transferState.upload;
+        if (upload && upload.busy) {
+          document.documentElement.dataset.probeMaskBlocked = "uploadModal";
+          return;
+        }
+        IM.closeUpload();
+        return;
+      }
+      if (id === "downloadModal") {
+        const download = IM.transferState.download;
+        if (download && download.busy) {
+          document.documentElement.dataset.probeMaskBlocked = "downloadModal";
+          return;
+        }
+        IM.closeDownload();
+        return;
+      }
       const modal = IM.$("#" + id);
       if (!modal) return;
       modal.hidden = true;

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,7 +23,7 @@ func httpClient(conn *Connection) *http.Client {
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
-		TLSClientConfig:     &tls.Config{InsecureSkipVerify: conn.configBool("insecure")},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: conn.configBool("insecure")},
 		// The list walk runs several requests to the same host at once (up to
 		// harborArtifactWorkers). The idle pool must be at least that wide or
 		// each round of requests pays a new TLS handshake for every connection
@@ -71,15 +72,38 @@ func baseURL(conn *Connection) string {
 // ---------------------------------------------------------------------------
 
 type OciClient struct {
-	base   string
-	cred   *Credential
-	http   *http.Client
+	base string
+	cred *Credential
+	http *http.Client
+	// stream is the same transport without Client.Timeout. A 60-second total
+	// timeout is right for a list request and fatal for a multi-gigabyte layer:
+	// it would abort the upload halfway through. Streaming calls are bounded by
+	// their context (the transfer job's deadline) and by cancellation instead.
+	stream *http.Client
 	tokens map[string]string // scope -> bearer token
+	// tokMu guards tokens: upload/export jobs run in their own goroutines and
+	// several of them can share one session's client.
+	tokMu  sync.Mutex
 	anonOK bool
 }
 
+func (c *OciClient) tokenFor(scope string) string {
+	c.tokMu.Lock()
+	defer c.tokMu.Unlock()
+	return c.tokens[scope]
+}
+
+func (c *OciClient) setToken(scope, token string) {
+	c.tokMu.Lock()
+	defer c.tokMu.Unlock()
+	c.tokens[scope] = token
+}
+
 func newOciClient(base string, cred *Credential, hc *http.Client) *OciClient {
-	return &OciClient{base: base, cred: cred, http: hc, tokens: map[string]string{}}
+	// Share the transport (connection pool / TLS settings) but not the total
+	// request timeout; see the field comment.
+	stream := &http.Client{Transport: hc.Transport}
+	return &OciClient{base: base, cred: cred, http: hc, stream: stream, tokens: map[string]string{}}
 }
 
 // do performs a request with the Docker Registry v2 token-challenge flow.
@@ -102,7 +126,7 @@ func (c *OciClient) do(ctx context.Context, method, path string, body []byte, co
 		req.Header.Set("accept", "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json, */*")
 
 		// Prefer a cached bearer token for this scope.
-		if tok := c.tokens[scope]; tok != "" {
+		if tok := c.tokenFor(scope); tok != "" {
 			req.Header.Set("authorization", "Bearer "+tok)
 		} else if c.cred != nil {
 			req.Header.Set("authorization", c.cred.Header())
@@ -116,7 +140,7 @@ func (c *OciClient) do(ctx context.Context, method, path string, body []byte, co
 			challenge := resp.Header.Get("www-authenticate")
 			resp.Body.Close()
 			if tok, ok := c.fetchToken(ctx, challenge, scope); ok {
-				c.tokens[scope] = tok
+				c.setToken(scope, tok)
 				attempts++
 				continue
 			}

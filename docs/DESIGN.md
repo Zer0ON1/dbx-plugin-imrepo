@@ -153,6 +153,45 @@ settings 测试的 P 组会读**包内**的 `manifest.json`，断言它的 `entr
 
 完整对照表见 README 的「仓库类型支持范围」。
 
+### 镜像包上传 / 下载（.tar / .tar.gz）
+
+两个方向都走标准 OCI Distribution，所以对 Harbor、通用 v2、Nexus/Artifactory/Quay 与云厂商托管仓库
+是同一套代码；差异只在目标仓库的路径语义（Harbor 是「项目/仓库」，v2 是完整仓库路径）和认证方式，
+而认证沿用连接已有的会话与 token 流程。
+
+- **上传**：UI 以 1 MiB 分块把文件交给 sidecar，sidecar 先落到插件数据目录的 `transfers/`。分块
+  不是随便定的：DBX 宿主桥拒绝参数 JSON 超过 2 MiB 的请求，4 MiB 原始数据 base64 后约 5.6 MiB，
+  会直接被宿主拒绝（"Plugin bridge request is too large"）；1 MiB 编码后约 1.4 MiB。`.tar.gz`
+  先完整解压一次，再建立 tar 索引（只读文件头，不把层读进内存）。支持两种包形：
+  `docker save`（有 `manifest.json` 时以它为准，因为 RepoTags 才是用户保存时的 tag）与
+  OCI image layout（`oci-layout` + `index.json` + `blobs/sha256/*`）。用户选中包内某个镜像后，
+  sidecar 逐个上传 config/layer blob，最后 PUT manifest；多架构 OCI index 会先按 digest 上传子 manifest。
+- **下载**：sidecar 从 registry **流式**读 blob 并边读边写 tar，UI 再以 4 MiB 分块取走（响应方向不受
+  请求侧的 2 MiB 限制）；桌面宿主保存时把分块解码为 `Uint8Array`，走 `fileTransfer.write` 的二进制
+  通道（8 MiB 上限），而不是把 4 MiB 的 base64 字符串塞进请求参数。旧宿主/网页宿主回退为
+  `<input type=file>` / Blob 下载。Docker 归档
+  使用 `manifest.json + <config>.json + <digest>/layer.tar`（`docker load` 实测可直接加载，层保持
+  原压缩字节）；OCI 布局写 `oci-layout + index.json + blobs/sha256/*`（skopeo/podman 可读）。多架构
+  镜像在 Docker 格式下必须选一个平台，OCI 格式可以导出全部平台。
+- **为什么先落临时文件**：tar 里的 blob 需要随机访问（manifest 可能在任意位置，层更大），而 gzip
+  不可随机访问。先解压/索引一次，后续按偏移 `ReadAt`，避免"每取一个 blob 就整包重读"。
+- **60 秒超时的坑**：普通列表请求的 `http.Client` 有 60 秒总超时，对多 GB 的 PUT/GET 是致命的
+  （传到一半被客户端自己掐断）。流式上传/下载因此使用同一 Transport、但 `Timeout: 0` 的 client，
+  由任务 context（6 小时上限）和取消来控制。
+- **源信息与目标**：包内镜像按「站点 / 项目 / 仓库 / 版本 / 格式 / ARCH / 层数 / 大小」只读展示，
+  其中的 URL 各段不可编辑；多架构镜像只有 ARCH 是下拉框（可选择一个平台，也可选“全部平台”发布
+  index）。目标项目/仓库固定为当前工作台选中的仓库，**只有目标 Tag 可编辑**，默认等于源 Tag。上传
+  成功后只关闭对话框；拉取命令可从对应 Tag 行的拉取图标查看。镜像的拉取地址由目标仓库 + Tag 决定，
+  源仓库路径不会在目标 registry 变成别名。
+- **传输中的遮罩点击**：上传/下载进行中点击对话框外的遮罩**没有任何反应**（不关闭、不提示），避免
+  误取消正在上传或保存的传输；必须点「取消」才会真正取消（取消会终止 sidecar 任务并丢弃已打开的
+  目标文件）。
+- **识别只看内容**：不看扩展名。gzip 魔数（`1f 8b`）→ 解压 → tar 结构 → `manifest.json` /
+  `index.json`；gzip 解压失败、解压后不是 tar、或 tar 里没有这两种清单，分别给出明确错误。
+- **安全**：仓库名/引用/tag 都做白名单校验后才拼进 URL；tar 条目不落盘、不按包内路径解压；
+  跨主机的 upload Location 不携带 registry 的 Authorization（预签名 URL 的签名不能被破坏，
+  凭据也不能泄漏给第三方）；导出 tar 的条目名只由校验过的 digest 和固定名生成。
+
 ## UI 主题与配色（重要约定）
 
 **不要使用 `--color-*` / `--radius*` / `--font*` 作为自定义变量名。**
@@ -233,6 +272,17 @@ python3 tools/shoot-screenshots.py --list        # 看有哪些镜头
 | `registry/images` | `namespace` | 命名空间总览：并发遍历 Tag→Manifest，**按 digest 去重**计镜像数与总大小 |
 | `registry/arches` | `repository`, `reference` | 该引用的架构列表（index 取全部条目的 platform；单架构 manifest 读 config blob 的 `architecture`）。V2 的 Tag 列表不带平台信息，所以架构徽章是懒加载回填的 |
 | `registry/overview` | — | V2 仓库总览：命名空间/仓库/镜像/Tag/总大小 + 各命名空间存储分布（无审计日志，故没有拉取次数） |
+| `transfer/uploadBegin` | `name`, `size?` | 创建上传会话，返回 `{id, chunkBytes}` |
+| `transfer/uploadChunk` | `id`, `offset`, `data`(base64) | 顺序写入一块（UI 用 `uploadBegin.chunkBytes` = 1 MiB，避开宿主桥 2 MiB JSON 限制；offset 必须等于已收字节数） |
+| `transfer/uploadEnd` | `id` | 结束接收，后台解压/索引；状态由 `uploadStatus` 轮询 |
+| `transfer/uploadStatus` | `id` | `{state, error, archive{format,compressed,size,images[]}, push{state,phase,done,total,...}}` |
+| `transfer/uploadPush` | `id`, `imageIndex`, `repository`, `tag` | 后台把选中的镜像推到目标仓库；进度同样由 `uploadStatus.push` 汇报 |
+| `transfer/uploadClose` | `id` | 取消并删除临时文件/会话 |
+| `transfer/exportPlan` | `repository`, `reference` | 读取镜像信息：digest/mediaType/isIndex/isImage/size/平台列表（多架构选择与大小估算） |
+| `transfer/exportBegin` | `repository`, `reference`, `format`(docker/oci), `gzip?`, `platform?`, `tag?` | 启动后台导出，返回 `{id, name}`；`platform` 为空且为 OCI 格式 = 全部平台 |
+| `transfer/exportStatus` | `id` | `{state,error,done,total,size,name,...}` |
+| `transfer/exportChunk` | `id`, `offset`, `length?` | 读取已生成归档的一块（base64，单块上限 4 MiB） |
+| `transfer/exportClose` | `id` | 取消并删除归档/会话 |
 | `harbor/projects` | — | Harbor 项目列表 |
 | `harbor/repositories` | `project` | 项目下仓库列表 |
 | `harbor/artifacts` | `project`, `repository` | Artifact（含 tags）列表 |

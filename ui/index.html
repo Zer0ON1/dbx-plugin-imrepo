@@ -79,6 +79,10 @@
         <div class="content-toolbar" id="contentToolbar">
           <div class="crumbs" id="crumbs"></div>
           <div class="content-toolbar-actions">
+            <button class="btn btn-outline btn-sm" id="btnUpload" title="上传本地镜像包" data-i18n-title="upload">
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M8 1.5 3.72 5.78l1.06 1.06 2.47-2.47v6.94h1.5V4.37l2.47 2.47 1.06-1.06L8 1.5ZM2.5 13h11v1.5h-11V13Z"/></svg>
+              <span data-i18n="upload">上传镜像包</span>
+            </button>
             <button class="btn btn-outline btn-sm" id="btnCleanup" disabled
                     title="清理无 Tag 的孤立镜像">
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6.5 1.5h3l.4 1.2H13v1.6H3V2.7h3.1l.4-1.2ZM4.1 5.8h7.8l-.55 7.6A1.5 1.5 0 0 1 9.85 14.8H6.15a1.5 1.5 0 0 1-1.5-1.4L4.1 5.8Z"/></svg>
@@ -255,6 +259,95 @@
     </div>
   </div>
 
+  <!-- Upload a local image archive -->
+  <div class="modal-mask" id="uploadModal" hidden>
+    <div class="modal modal-wide">
+      <div class="modal-header"><h3 data-i18n="upload.title">上传本地镜像包</h3></div>
+      <div class="modal-body" id="uploadBody">
+        <div class="transfer-pick">
+          <button class="btn btn-outline btn-sm" id="btnPickArchive" data-i18n="upload.pick">选择镜像包</button>
+          <span class="transfer-file muted" id="uploadFileName" data-i18n="upload.noFile">尚未选择文件</span>
+        </div>
+        <p class="hint" data-i18n="upload.formats">支持 docker save 归档与 OCI 镜像布局。</p>
+        <input type="file" id="uploadFileInput" hidden />
+        <div id="uploadProgress" hidden>
+          <div class="progress"><div class="progress-bar" id="uploadBar"></div></div>
+          <p class="hint" id="uploadStatusText"></p>
+        </div>
+        <div id="uploadDetails" hidden>
+          <label class="field" id="uploadImageField" hidden><span data-i18n="upload.image">包内镜像</span>
+            <select id="uploadImage"></select>
+          </label>
+          <div class="transfer-facts">
+            <div class="fact"><span class="k" data-i18n="upload.site">站点</span><span class="v mono" id="uploadSourceSite">—</span></div>
+            <div class="fact"><span class="k" data-i18n="upload.project">项目</span><span class="v mono" id="uploadSourceProject">—</span></div>
+            <div class="fact"><span class="k" data-i18n="upload.repository">仓库</span><span class="v mono" id="uploadSourceRepo">—</span></div>
+            <div class="fact"><span class="k" data-i18n="upload.version">版本</span><span class="v mono" id="uploadSourceVersion">—</span></div>
+            <div class="fact"><span class="k" data-i18n="upload.format">格式</span><span class="v" id="uploadSourceFormat">—</span></div>
+            <div class="fact"><span class="k">ARCH</span><span class="v" id="uploadSourceArch">—</span></div>
+            <div class="fact"><span class="k" data-i18n="upload.layers">层数</span><span class="v" id="uploadSourceLayers">—</span></div>
+            <div class="fact"><span class="k" data-i18n="upload.size">大小</span><span class="v" id="uploadSourceSize">—</span></div>
+          </div>
+
+          <div class="transfer-target">
+            <p class="transfer-target-title" data-i18n="upload.target">目标位置</p>
+            <div class="transfer-facts">
+              <div class="fact" id="uploadTargetProjectField"><span class="k" data-i18n="upload.project">项目</span><span class="v mono" id="uploadTargetProject">—</span></div>
+              <div class="fact"><span class="k" data-i18n="upload.repository">仓库</span><span class="v mono" id="uploadTargetRepo">—</span></div>
+            </div>
+            <label class="field"><span data-i18n="upload.targetTag">目标 Tag</span>
+              <input id="uploadTag" autocomplete="off" placeholder="v1.0.0" />
+            </label>
+            <p class="hint transfer-target-ref" id="uploadTargetRef"></p>
+          </div>
+          <p class="hint warn" id="uploadWarning" hidden></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btnUploadCancel" data-i18n="cancel">取消</button>
+        <button class="btn btn-primary" id="btnUploadPush" disabled data-i18n="upload.push">上传到仓库</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Download one image as an archive -->
+  <div class="modal-mask" id="downloadModal" hidden>
+    <div class="modal modal-wide">
+      <div class="modal-header"><h3 data-i18n="download.title">下载镜像包</h3></div>
+      <div class="modal-body" id="downloadBody">
+        <div class="transfer-source" id="downloadSource"></div>
+        <div id="downloadConfig" hidden>
+          <label class="field"><span data-i18n="download.format">归档格式</span>
+            <select id="downloadFormat">
+              <option value="docker" data-i18n="download.formatDocker">Docker 归档（docker load 可直接加载）</option>
+              <option value="oci" data-i18n="download.formatOci">OCI 镜像布局（skopeo / podman）</option>
+            </select>
+          </label>
+          <p class="hint" id="downloadFormatHint"></p>
+          <label class="field"><span data-i18n="download.compression">压缩</span>
+            <select id="downloadCompression">
+              <option value="tar" data-i18n="download.tar">.tar（不压缩）</option>
+              <option value="targz" data-i18n="download.targz">.tar.gz（gzip）</option>
+            </select>
+          </label>
+          <label class="field" id="downloadPlatformField"><span data-i18n="download.platform">平台</span>
+            <select id="downloadPlatform"></select>
+          </label>
+          <p class="hint" id="downloadSize"></p>
+        </div>
+        <div id="downloadProgress" hidden>
+          <div class="progress"><div class="progress-bar" id="downloadBar"></div></div>
+          <p class="hint" id="downloadStatusText"></p>
+        </div>
+        <p class="hint warn" id="downloadWarning" hidden></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btnDownloadCancel" data-i18n="cancel">取消</button>
+        <button class="btn btn-primary" id="btnDownloadStart" disabled data-i18n="download.start">开始下载</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast" hidden></div>
 
   <!-- App scripts. Plain classic scripts, never ES modules: the workbench is also
@@ -281,6 +374,7 @@
   <script src="./js/render-gc.js"></script>
   <script src="./js/render-logs.js"></script>
   <script src="./js/render-create-project.js"></script>
+  <script src="./js/render-transfer.js"></script>
   <script src="./js/main.js"></script>
 </body>
 </html>

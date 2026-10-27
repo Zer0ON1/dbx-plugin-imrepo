@@ -429,6 +429,54 @@ html, body {
 .hint.warn { color: var(--im-warning); font-weight: 500; }
 .hint.ok { color: var(--im-success); font-weight: 500; }
 
+/* ---------- Image archive transfer ---------- */
+.transfer-pick { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.transfer-file {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12px; color: var(--im-fg-muted);
+}
+.transfer-facts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px 14px; margin: 4px 0 14px;
+  padding: 10px 12px; border: 1px solid var(--im-border);
+  border-radius: var(--im-radius-sm); background: var(--im-surface-2);
+}
+.fact { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fact .k { font-size: 11px; color: var(--im-fg-subtle); }
+.fact .v {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px; color: var(--im-fg);
+}
+.fact .v.mono { font-family: var(--im-mono); font-size: 12px; }
+.fact select {
+  width: 100%; height: 32px; padding: 0 8px; font-size: 13px;
+  border-radius: var(--im-radius-sm); border: 1px solid var(--im-border-strong);
+  background: var(--im-bg); color: var(--im-fg); outline: none; cursor: pointer;
+}
+.fact select:focus { border-color: var(--im-primary); }
+/* Keep native select menus legible in both themes. */
+select { cursor: pointer; }
+select option { background: var(--im-bg); color: var(--im-fg); }
+.transfer-target {
+  margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--im-border);
+}
+.transfer-target-title {
+  margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--im-fg-muted);
+}
+.transfer-source {
+  font-family: var(--im-mono); font-size: 13px; color: var(--im-fg);
+  margin-bottom: 10px; word-break: break-all;
+}
+.progress {
+  height: 6px; margin: 12px 0 6px; border-radius: 999px;
+  background: var(--im-surface-2); overflow: hidden;
+}
+.progress-bar {
+  width: 0; height: 100%; border-radius: inherit;
+  background: var(--im-primary-solid);
+  transition: width 0.2s ease;
+}
+
 /* ---------- Untagged cleanup ---------- */
 .cleanup-summary {
   display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap;

@@ -163,6 +163,30 @@ func boolParam(params map[string]any, key string) bool {
 	}
 }
 
+// int64Param reads a size/offset parameter. Sizes do not fit an int on a
+// 32-bit build (none ship, but the protocol should not depend on that).
+func int64Param(params map[string]any, key string) int64 {
+	if params == nil {
+		return 0
+	}
+	switch v := params[key].(type) {
+	case int:
+		return int64(v)
+	case int64:
+		return v
+	case float64:
+		return int64(v)
+	case json.Number:
+		n, _ := v.Int64()
+		return n
+	case string:
+		n, _ := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		return n
+	default:
+		return 0
+	}
+}
+
 // intParam reads an integer parameter, accepting every numeric encoding the host
 // might send (int, float64, json.Number, numeric string).
 func intParam(params map[string]any, key string) int {

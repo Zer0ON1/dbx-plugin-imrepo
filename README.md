@@ -44,6 +44,8 @@ CI 另在 ubuntu / windows / macos 三个真实 runner 上各自跑一遍完整�
 | **总览页签与图表** | 统计卡 + SVG 横向柱状图（Harbor：拉取最多的项目、项目存储分布；V2：命名空间存储分布） |
 | **架构结构展示** | 多架构镜像按平台逐个展示为**一个圆圈徽章**（`linux/amd64`、`linux/arm64`…），V2 侧懒加载回填 |
 | Tag 管理 | Tag 列表、**重命名**（写新 Tag + 删原 Tag）、删除（OCI DELETE / Harbor 原生） |
+| **上传镜像包** | 选择本地 `.tar` / `.tar.gz`：解析 docker save 归档或 OCI 镜像布局，按「站点 / 项目 / 仓库 / 版本 / 格式 / ARCH / 层数 / 大小」只读展示包内镜像；多架构镜像只在 ARCH 中选择平台（可选中单平台或全部）；**目标固定为当前仓库，仅目标 Tag 可编辑**（默认源 Tag）；分块传输，完成后关闭对话框 |
+| **下载镜像包** | 把任意 Tag（或无 Tag 的 digest）导出为 `.tar` / `.tar.gz`：Docker 归档（`docker load` 可直接加载）或 OCI 镜像布局（skopeo/podman）；多架构镜像可选平台，OCI 布局可导出全部平台。桌面宿主直接写入保存对话框，网页宿主回退为浏览器下载（大文件会占用内存） |
 | **删除仓库 / 项目** | 整仓、整项目删除（Harbor）：危险区先列出将失去的**真实计数**（仓库/镜像/Tag/大小）与受保留策略保护的 Tag，**必须键入目标名**才能执行；确认在后端校验，绕过界面也拦得住 |
 | 镜像层解析 | Manifest → Index → Config Blob 逐层指令；每层大小（占比条 + 百分比 + 最大层高亮 + 按大小排序） |
 | 漏洞报告 | Harbor/Trivy CVE 分级统计 + **按设置阈值判定**「已达/未达阈值」+ 缓存 + 刷新/触发扫描 |
@@ -51,7 +53,16 @@ CI 另在 ubuntu / windows / macos 三个真实 runner 上各自跑一遍完整�
 | 设置 | 全局（用户管理/扫描器/关于）+ 项目级（可见性、配额、成员与角色、回收策略、本项目扫描器），按连接持久化，**由后端强制执行** |
 | 快捷工具 | 拉取命令弹窗：镜像地址 / docker / nerdctl / crictl / podman / ctr / docker login，点整行即复制 |
 | 加载体验 | 展开项目后台预热前 6 个仓库；列表 60s 缓存 + 请求去重；**慢响应不会覆盖后点的仓库** |
+| **大文件传输** | 上传以 1 MiB 分块（宿主桥单请求上限 2 MiB，base64 后约 1.4 MiB），下载以 4 MiB 分块并走宿主的二进制保存通道；桌面宿主直接写入原生保存对话框选定的文件。归档临时文件放在插件数据目录的 `transfers/`，关闭对话框或完成后删除，异常退出由 24 小时清扫兜底 |
 | Harbor 自动识别 | 类型选成 Docker Registry v2 但服务器其实是 Harbor 时，探测 `/api/v2.0/ping` 自动启用 Harbor 功能 |
+
+> **Docker 语义里的 tag 只是冒号后的版本标签，完整镜像是 `<registry 主机>/<仓库路径>:<tag>`。**
+> 上传对话框会实时预览完整目标引用；目标项目/仓库固定为当前仓库，只有 Tag 可编辑。
+> **拉取地址只由目标仓库 + 目标 Tag 决定。** 归档里的源引用（例如
+> `docker.cnb.io/dbxio.com/dbx:0.60.0`）只用于预填；上传到 `hub.dibtime.com` 的项目 `dbx`、
+> 仓库 `dbx`、Tag `0.60.0_amd64` 后，拉取命令是
+> `docker pull hub.dibtime.com/dbx/dbx:0.60.0_amd64`。源 registry 的路径不会成为别名，
+> `docker.cnb.io/...` 仍然只指向原仓库里的那份镜像。
 
 ## 仓库类型支持范围
 
@@ -69,6 +80,8 @@ REST API 的功能只在 Harbor 上出现。**界面上不可用的按钮会置�
 | 删除仓库 / 项目 | ✅ | ❌ | v2 协议没有仓库级删除接口（只能逐个 tag 删），也没有项目对象；两者都是 Harbor 的 REST 资源 |
 | 镜像层逐层解析 | ✅ | ✅ | — |
 | 拉取命令生成 | ✅ | ✅ | — |
+| 上传本地镜像包 (.tar/.tar.gz) | ✅ | ✅ | 走标准 OCI push；Harbor 的目标需写成「项目/仓库」 |
+| 下载镜像包 (.tar/.tar.gz) | ✅ | ✅ | 走标准 OCI pull；导出由 sidecar 边读边打包 |
 | 总览图表（存储分布） | ✅ | ✅ | — |
 | 总览图表（拉取次数） | ✅ | ❌ | 数据来自 Harbor 审计日志，v2 无 |
 | 漏洞报告 (CVE) | ✅ | ❌ | 需要扫描器 API（Harbor/Trivy），v2 协议无此接口 |
@@ -166,7 +179,7 @@ npx dbx-plugin dev --path . --port 5190      # 本地调试宿主 → http://127
 
 ### 测试
 
-四个 Sidecar 测试跑**打包产物**（`dist/` 里对应当前平台的 `.dbxp` 内的二进制），UI 测试用无头
+Sidecar 测试跑**打包产物**（`dist/` 里对应当前平台的 `.dbxp` 内的二进制），UI 测试用无头
 浏览器渲染真实 `ui/index.html`。测试是跨平台的：`tools/_harness.py` 按主机自动选包、把配置目录
 隔离到临时目录、并找一个 Chromium 系浏览器（优先 `chrome-headless-shell`，可用 `CHROME_HEADLESS_SHELL` 指定；本机找不到会跳过，**CI 里找不到则直接失败**——跳过与通过无法区分）。
 
@@ -175,14 +188,15 @@ npx dbx-plugin dev --path . --port 5190      # 本地调试宿主 → http://127
 | 测试 | 断言数 | 验证的是 |
 |---|---|---|
 | `test-settings-e2e.py` | 185 | 设置的持久化、校验与**实际生效**（后端行为）、V2 命名空间与总览、包布局 |
-| `test-ui-e2e.py` | 171 | 界面行为与策略可见性，含总览图表、架构徽章、连接切换、空项目侧栏、拉取图标与日志日期筛选 |
+| `test-ui-e2e.py` | 211 | 界面行为与策略可见性，含总览图表、架构徽章、连接切换、空项目侧栏、拉取图标、日志日期筛选与镜像包上传/下载对话框 |
+| `test-transfer-e2e.py` | 93 | 镜像包上传/下载：docker/OCI 归档解析、推送请求、chunked 回退、平台选择、导出内容与错误路径 |
 | `test-layers-e2e.py` | 23 | 逐层大小/指令/总量解析 |
 | `test-cleanup-e2e.py` | 21 | 孤立 Artifact 清理的安全规则 |
 | `test-harbor-paging-e2e.py` | 35 | Harbor 列表分页、空列表形状、artifact 全量读取与总览扫描预算 |
 | `test-logs-e2e.py` | 17 | 操作日志的日期范围过滤与分页透传 |
 | `test-retag-e2e.py` | 17 | 重命名 Tag 的真实请求序列 |
 | `test-mcp-e2e.py` | 51 | MCP 工具的参数校验与绕过安全规则的拒绝路径 |
-| `check-contrast.py` / `check-i18n.py` | 全量配色对 / 321 键×2 语言 | 配色对比度门禁、翻译门禁 |
+| `check-contrast.py` / `check-i18n.py` | 全量配色对 / 389 键×2 语言 | 配色对比度门禁、翻译门禁 |
 | `check-packages.py` | 6 个目标 | 每个包二进制的格式/架构/签名与 manifest 路径是否与其平台相符 |
 | `check-browser-baseline.py` | 34 个特性 | UI 是否用了新于 Chrome 109 的 CSS/JS 特性（DBX 的最低引擎） |
 
@@ -196,7 +210,7 @@ dbx-plugin-imrepo/
 ├── ui/                  # 工作台 UI（沙箱 iframe，classic script + window.IMREPO）
 │   ├── index.html       # 按依赖顺序加载 js/*（不用 ES module，见 docs/DESIGN.md）
 │   ├── styles.css       # 明/暗主题调色板（私有 --im-* 令牌）
-│   └── js/              # 19 个模块：state / i18n / dom / format / rpc / render-* / main
+│   └── js/              # 20 个模块：state / i18n / dom / format / rpc / render-* / main
 ├── backend/             # Go Sidecar
 │   ├── main.go          # SDK 入口 + 身份解析（从包内 manifest 读 id/version）
 │   ├── dispatch.go      # RPC 方法表：51 个方法一览即 API 面
@@ -205,6 +219,7 @@ dbx-plugin-imrepo/
 │   ├── harbor.go        # Harbor REST v2.0 客户端
 │   ├── v2projects.go    # V2 命名空间视图（"项目" = 仓库名首段）
 │   ├── cleanup.go / retag.go / layers.go    # 清理、重命名、镜像层解析
+│   ├── transfer.go / oci_transfer.go        # 镜像包解析/推送/导出，流式 blob 读写
 │   ├── scanner.go / settings.go             # CVE 报告与扫描器；设置与策略引擎
 │   ├── registry.go / admin.go               # 项目生命周期；管理面板聚合
 │   ├── session.go / types.go / pool.go      # 会话、连接解析、有界并发

@@ -6,6 +6,39 @@ Notable changes per release. Versions follow the plugin id
 
 ## Unreleased
 
+**Image archives can be uploaded and downloaded ([#4]).** A new Upload button takes a
+local `.tar` / `.tar.gz` file — a `docker save` archive or an OCI image layout —
+streams it to the sidecar in chunks, lists the images (and their platforms) it
+contains, and pushes the selected one to any project/repository on the current
+connection. The tag rows and artifact rows gained a download action that builds
+the archive on the sidecar and hands it to the host's file save dialog: Docker
+archive format for `docker load`, or an OCI image layout for skopeo/podman, with
+optional gzip. Multi-arch images offer a platform picker; an OCI export can
+carry every platform. Both directions use only standard OCI Distribution, so
+they work on every registry type the plugin supports — Harbor, plain v2,
+Nexus/Artifactory/Quay and the cloud registries — and the Harbor target is
+project/repository while a v2 target is the full repository path. Transfers are
+chunked end to end on a desktop host with the file-transfer bridge: a
+multi-gigabyte archive never sits in the UI or the sidecar memory, and an
+interrupted upload can be closed without leaving temp files behind. Older
+desktop builds and the web host fall back to a browser file input and a Blob
+download; that path still streams the upload but has to buffer a download in
+memory. Upload chunks are 1 MiB because the host bridge rejects request
+parameters over 2 MiB (a 4 MiB chunk is ~5.6 MiB once base64-encoded), and a
+save hands the host a Uint8Array through its binary channel rather than a
+base64 string. Archive type is detected from the bytes — gzip magic, tar
+structure, then manifest.json/index.json — never from the file extension. The
+tag parsed from the archive is the default destination tag and stays editable;
+the archive's own site/project/repository/version/format/ARCH/layers/size are
+shown read-only, with ARCH selectable (one platform or the whole index) for a
+multi-arch image. The destination is the repository already selected in the
+workbench — its project/repository cannot be changed in the dialog, only the
+tag. A backdrop click while a transfer is running does nothing at all (it neither
+closes the dialog nor shows a toast), so an accidental click cannot cancel a
+save or upload; the explicit Cancel button aborts and cleans up. A successful
+upload simply closes the dialog; the pull command remains available from the
+tag row for anyone who wants it.
+
 **An empty project no longer breaks the sidebar.** Harbor answers a project
 with no repositories with an empty list; the sidecar's paged reader returned a
 nil slice, which marshals to `null`, and the tree called `.map` on it. The
@@ -23,6 +56,8 @@ operation filters. The range goes to Harbor as its native
 `q=op_time=[min~max]` form — converted from the viewer's local days to UTC — so
 the pager's total stays exact. Audit logs are a Harbor-only feature, so this
 filter is Harbor-only too.
+
+[#4]: https://github.com/Zer0ON1/dbx-plugin-imrepo/issues/4
 
 ## 1.0.0
 
