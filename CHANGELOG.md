@@ -4,13 +4,13 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
-## Unreleased
+## 1.0.1
 
 **Image archives can be uploaded and downloaded ([#4]).** A new Upload button takes a
 local `.tar` / `.tar.gz` file — a `docker save` archive or an OCI image layout —
 streams it to the sidecar in chunks, lists the images (and their platforms) it
-contains, and pushes the selected one to any project/repository on the current
-connection. The tag rows and artifact rows gained a download action that builds
+contains, and pushes the selected one into the repository already selected in
+the workbench. The tag rows and artifact rows gained a download action that builds
 the archive on the sidecar and hands it to the host's file save dialog: Docker
 archive format for `docker load`, or an OCI image layout for skopeo/podman, with
 optional gzip. Multi-arch images offer a platform picker; an OCI export can
@@ -38,6 +38,21 @@ closes the dialog nor shows a toast), so an accidental click cannot cancel a
 save or upload; the explicit Cancel button aborts and cleans up. A successful
 upload simply closes the dialog; the pull command remains available from the
 tag row for anyone who wants it.
+
+**Validation scope.** Upload and download were exercised locally with a ~140 MB
+archive representing roughly 410 MB of image data. Larger archives are not yet
+covered and may expose issues; a failure report should include the archive size,
+registry type and the relevant log.
+
+**Connection credentials are cached locally (disclosure).** The last password /
+CLI secret is kept base64-encoded in `credentials.json` under the plugin data
+directory (`DBX_PLUGIN_DATA_DIR`) or, when the host provides none, the platform
+config directory: Windows `%AppData%\imrepo-dbx-plugin\`, macOS
+`~/Library/Application Support/imrepo-dbx-plugin/`, Linux
+`~/.config/imrepo-dbx-plugin/`. Base64 is encoding, not encryption: any local
+process or user that can read the file can recover the secret. Prefer a
+least-privilege account (Harbor robot / read-only token) and delete the file if
+it is not needed.
 
 **An empty project no longer breaks the sidebar.** Harbor answers a project
 with no repositories with an empty list; the sidecar's paged reader returned a
