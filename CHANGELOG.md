@@ -39,6 +39,14 @@ save or upload; the explicit Cancel button aborts and cleans up. A successful
 upload simply closes the dialog; the pull command remains available from the
 tag row for anyone who wants it.
 
+**Deleting an image now removes all of its tags in one action.** Harbor's
+per-tag delete left every other tag on the artifact, so an image with N tags
+took N confirmations to remove. The row action now deletes the artifact by
+digest after a fresh read; a protected tag, or an artifact inside the retention
+window, blocks the whole-image delete with the reason, and the × on each tag
+chip still deletes a single tag. The backend applies the same protected-tag
+check on the artifact path, so an assistant or a script cannot bypass it.
+
 **Validation scope.** Upload and download were exercised locally with a ~140 MB
 archive representing roughly 410 MB of image data. Larger archives are not yet
 covered and may expose issues; a failure report should include the archive size,

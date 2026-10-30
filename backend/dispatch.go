@@ -438,12 +438,47 @@ func deleteTagGuarded(ctx context.Context, s *Session, project, repo, reference,
 }
 
 func harborDeleteArtifact(ctx context.Context, s *Session, params map[string]any) (any, error) {
-	if err := s.guardRetentionWindow(ctx, strParam(params, "project"), strParam(params, "repository"),
-		"", strParam(params, "reference")); err != nil {
+	if err := deleteArtifactGuarded(ctx, s, strParam(params, "project"),
+		strParam(params, "repository"), strParam(params, "reference")); err != nil {
 		return nil, err
 	}
-	return map[string]any{"ok": true}, s.Harbor.DeleteArtifact(ctx,
-		strParam(params, "project"), strParam(params, "repository"), strParam(params, "reference"))
+	return map[string]any{"ok": true}, nil
+}
+
+// deleteArtifactGuarded removes one image and every tag pointing at it.
+//
+// The per-tag delete path checks the tag globs; deleting the artifact by digest
+// would remove all of them at once, including a protected one, so the artifact
+// path needs the same guard applied to every tag on a FRESH read. The UI also
+// blocks it, but the backend is the authority — an assistant or a script can
+// call this RPC directly.
+func deleteArtifactGuarded(ctx context.Context, s *Session, project, repo, reference string) error {
+	project = strings.TrimSpace(project)
+	repo = strings.TrimSpace(repo)
+	reference = strings.TrimSpace(reference)
+	if project == "" || repo == "" || reference == "" {
+		return errors.New("project, repository and reference are required")
+	}
+	art, err := s.Harbor.Artifact(ctx, project, repo, reference)
+	if err != nil {
+		return err
+	}
+	if art == nil {
+		return fmt.Errorf("artifact %s is no longer present in %s/%s", reference, project, repo)
+	}
+	for _, tag := range art.Tags {
+		if pattern, blocked := s.tagProtected(tag.Name); blocked {
+			return fmt.Errorf("cannot delete the whole image: %w", protectedTagError(tag.Name, pattern))
+		}
+	}
+	digest := art.Digest
+	if digest == "" {
+		digest = reference
+	}
+	if err := s.guardRetentionWindow(ctx, project, repo, "", digest); err != nil {
+		return err
+	}
+	return s.Harbor.DeleteArtifact(ctx, project, repo, reference)
 }
 
 // harborUntagged scans a project for artifacts with no tag, with the connection's

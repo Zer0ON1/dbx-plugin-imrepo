@@ -535,7 +535,11 @@
           digest: ("sha256:" + name + i).padEnd(24, "0"),
           size: (100 + i) * 1024 * 1024,
           push_time: "2026-09-22T14:18:36Z",
-          tags: [{ name: `${leaf}-${i + 1}` }],
+          // The first row carries two tags: the regression is that deleting an
+          // image with N tags used to need N per-tag calls.
+          tags: i === 0
+            ? [{ name: `${leaf}-1` }, { name: `${leaf}-1b` }]
+            : [{ name: `${leaf}-${i + 1}` }],
           // The backend computes `arches` from the references below and sends
           // both — the tag table reads `arches`. This fixture used to carry only
           // the raw references, exactly as the backend did, which is why the
@@ -577,12 +581,18 @@
         }
         return { ok: true, deleted: want, message: "project " + want + " deleted" };
       }
-      if (method === "harbor/deleteTag" || method === "registry/delete") {
+      if (method === "harbor/deleteTag" || method === "registry/delete"
+          || method === "harbor/deleteArtifact") {
         // The repository listing carries the counts the tree renders; a delete
         // that leaves them untouched would make "did the tree refresh?" a
         // question with two identical answers.
         const r = REPOS.find((x) => x.name === ((p && p.repository) || ""));
         if (r && typeof r.artifact_count === "number" && r.artifact_count > 0) r.artifact_count -= 1;
+        if (method === "harbor/deleteArtifact") {
+          document.documentElement.dataset.probeArtifactDelete =
+            ((p && p.project) || "") + "/" + ((p && p.repository) || "")
+            + "@" + ((p && p.reference) || "");
+        }
         return { ok: true };
       }
       if (method === "harbor/logs") {

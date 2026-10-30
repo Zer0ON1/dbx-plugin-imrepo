@@ -268,13 +268,28 @@
   }
 
   /** A tag chip; a lock means the retention policy refuses to remove it. */
-  IM.tagChip = function tagChip(name) {
+  IM.tagChip = function tagChip(name, onDelete) {
     const chip = IM.el("span", "tag-chip mono", name);
     const pat = IM.protectedPattern(name);
     if (pat) {
       chip.classList.add("protected");
       chip.title = IM.t("protected.tag") + ": " + pat;
       chip.appendChild(IM.svgIcon("lock"));
+    } else if (onDelete) {
+      // A per-tag delete inside the chip; the row-level action deletes the
+      // whole image. This keeps both operations available without a dialog
+      // that asks which one the user meant.
+      const x = IM.el("button", "tag-x");
+      x.type = "button";
+      x.title = IM.t("delete") + ": " + name;
+      x.setAttribute("aria-label", x.title);
+      x.appendChild(IM.svgIcon("close"));
+      x.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onDelete(name);
+      });
+      chip.appendChild(x);
     }
     return chip;
   }
@@ -302,9 +317,35 @@
    * policy allows, falling back to a blocked button (which explains itself) when
    * every tag on the artifact is protected.
    */
-  IM.deletableTag = function deletableTag(names, fallback) {
-    const open = (names || []).filter((n) => !IM.protectedPattern(n));
-    return open.length ? open[0] : fallback;
+  /**
+   * Row-level delete for one Harbor artifact. It removes every tag in one
+   * confirmation; a protected tag (or the retention window) blocks it with the
+   * reason in the tooltip. Per-tag deletion is offered by the × on each chip.
+   */
+  IM.artifactDeleteBtn = function artifactDeleteBtn(project, repo, artifact, blockedReason) {
+    const names = ((artifact && artifact.tags) || []).map((t) => t.name);
+    const hits = names
+      .map((name) => [name, IM.protectedPattern(name)])
+      .filter((hit) => hit[1]);
+    let reason = "";
+    if (hits.length) {
+      reason = IM.t("artifact.deleteProtected").replace(
+        "{tags}", hits.map(([name, pat]) => name + " [" + pat + "]").join(", "));
+    } else if (blockedReason) {
+      reason = blockedReason;
+    }
+    const button = IM.iconBtn(reason || IM.t("artifact.delete"), "close",
+      () => {
+        if (reason) { IM.toast(reason, "err"); return; }
+        IM.openArtifactDelete(project, repo, artifact);
+      },
+      "danger" + (reason ? " blocked" : ""));
+    button.dataset.action = "delete-artifact";
+    if (reason) {
+      button.classList.add("blocked");
+      button.setAttribute("aria-disabled", "true");
+    }
+    return button;
   }
 
   IM.deleteTagBtn = function deleteTagBtn(repo, tag, reference, blockedReason) {
@@ -440,8 +481,15 @@
       const names = (a.tags && a.tags.length) ? a.tags.map((x) => x.name) : [];
       const tr = IM.el("tr");
       const tdTag = IM.el("td");
-      if (names.length) names.forEach((n) => tdTag.appendChild(IM.tagChip(n)));
-      else tdTag.appendChild(IM.el("span", "tag-chip", IM.t("untagged")));
+      const windowBlocked = inWindow.has(a.digest);
+      if (names.length) {
+        names.forEach((n) => tdTag.appendChild(IM.tagChip(
+          n,
+          windowBlocked ? null : (tag) => IM.openDelete(project + "/" + repo, tag, a.digest),
+        )));
+      } else {
+        tdTag.appendChild(IM.el("span", "tag-chip", IM.t("untagged")));
+      }
       // Harbor reports platforms in the artifact payload and that is the cheap
       // path — but only when it has them. For a single-arch image, an older
       // Harbor, or a payload that carries neither `platform` nor `references`,
@@ -490,8 +538,8 @@
       tdDownload.appendChild(IM.downloadBtn(project + "/" + repo, names[0] || a.digest, names[0] || a.digest));
       const tdDel = IM.el("td");
       if (names.length) {
-        tdDel.appendChild(IM.deleteTagBtn(project + "/" + repo, IM.deletableTag(names, names[0]), a.digest,
-          inWindow.has(a.digest) ? windowReason : ""));
+        tdDel.appendChild(IM.artifactDeleteBtn(
+          project, repo, a, windowBlocked ? windowReason : ""));
       }
       tr.append(tdTag, tdDigest, tdSize, tdPush, tdPull, tdRetag, tdLayers, tdVuln, tdDownload, tdDel);
       tbody.appendChild(tr);

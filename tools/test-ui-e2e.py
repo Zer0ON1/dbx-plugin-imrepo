@@ -666,16 +666,28 @@ def main() -> int:
         check("an unconfigured registry says so instead of erroring",
               ("尚未配置" in dom or "No GC schedule" in dom), "no empty state")
 
-        print("\nM8) deleting a tag re-reads the counts the tree shows")
-        # Reported from use: after deleting a tag the sidebar kept its old number,
-        # and leaving the project and coming back showed the same one — the
-        # repository listing was still the cached copy, and only the artifact
-        # listing had been invalidated.
+        print("\nM8) deleting an image removes all its tags in one call")
+        # Reported from use: a Harbor artifact with N tags needed N per-tag
+        # deletes. The row action now targets the artifact (digest), so one
+        # confirmation removes the image and every tag; the × on a chip still
+        # deletes a single tag.
         dom = browser.dom("theme=light&probe=1&modal=delete&confirmdelete=1", 9000)
         reqs = probe_requests(dom)
         listing_reads = [r for r in reqs if r.startswith("harbor/repositories")]
-        check("the delete completed", any(r.startswith("harbor/deleteTag") for r in reqs) or
-              any(r.startswith("registry/delete") for r in reqs), f"requests: {reqs[-8:]}")
+        check("the image delete completed", any(r.startswith("harbor/deleteArtifact") for r in reqs),
+              f"requests: {reqs[-8:]}")
+        check("no per-tag delete was needed", not any(r.startswith("harbor/deleteTag") for r in reqs),
+              f"requests: {reqs[-8:]}")
+        msg_match = re.search(r'id="deleteMsg">(.*?)</p>', dom, re.S)
+        msg = msg_match.group(1) if msg_match else ""
+        check("the confirmation named every tag on the image",
+              "ledger-api-1" in msg and "ledger-api-1b" in msg, msg or "no message")
+        expected_digest = ("sha256:" + "ledger-api0").ljust(24, "0")
+        check("the backend received the artifact digest",
+              f'data-probe-artifact-delete="payments/ledger-api@{expected_digest}"' in dom,
+              re.search(r'data-probe-artifact-delete="[^"]*"', dom) or "digest marker missing")
+        check("per-tag delete is still offered on the chips", 'class="tag-x"' in dom,
+              "no chip-level delete affordance")
         check("the repository listing is re-read after the deletion",
               len(listing_reads) >= 2,
               f"listing read {len(listing_reads)} time(s): {listing_reads}")

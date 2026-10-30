@@ -187,8 +187,8 @@ Sidecar 测试跑**打包产物**（`dist/` 里对应当前平台的 `.dbxp` 内
 
 | 测试 | 断言数 | 验证的是 |
 |---|---|---|
-| `test-settings-e2e.py` | 185 | 设置的持久化、校验与**实际生效**（后端行为）、V2 命名空间与总览、包布局 |
-| `test-ui-e2e.py` | 211 | 界面行为与策略可见性，含总览图表、架构徽章、连接切换、空项目侧栏、拉取图标、日志日期筛选与镜像包上传/下载对话框 |
+| `test-settings-e2e.py` | 190 | 设置的持久化、校验与**实际生效**（后端行为）、V2 命名空间与总览、包布局 |
+| `test-ui-e2e.py` | 215 | 界面行为与策略可见性，含总览图表、架构徽章、连接切换、空项目侧栏、拉取图标、日志日期筛选与镜像包上传/下载对话框 |
 | `test-transfer-e2e.py` | 93 | 镜像包上传/下载：docker/OCI 归档解析、推送请求、chunked 回退、平台选择、导出内容与错误路径 |
 | `test-layers-e2e.py` | 23 | 逐层大小/指令/总量解析 |
 | `test-cleanup-e2e.py` | 21 | 孤立 Artifact 清理的安全规则 |
@@ -196,7 +196,7 @@ Sidecar 测试跑**打包产物**（`dist/` 里对应当前平台的 `.dbxp` 内
 | `test-logs-e2e.py` | 17 | 操作日志的日期范围过滤与分页透传 |
 | `test-retag-e2e.py` | 17 | 重命名 Tag 的真实请求序列 |
 | `test-mcp-e2e.py` | 51 | MCP 工具的参数校验与绕过安全规则的拒绝路径 |
-| `check-contrast.py` / `check-i18n.py` | 全量配色对 / 389 键×2 语言 | 配色对比度门禁、翻译门禁 |
+| `check-contrast.py` / `check-i18n.py` | 全量配色对 / 393 键×2 语言 | 配色对比度门禁、翻译门禁 |
 | `check-packages.py` | 6 个目标 | 每个包二进制的格式/架构/签名与 manifest 路径是否与其平台相符 |
 | `check-browser-baseline.py` | 34 个特性 | UI 是否用了新于 Chrome 109 的 CSS/JS 特性（DBX 的最低引擎） |
 

@@ -362,10 +362,20 @@ html, body {
 
 /* ---------- Tags / chips ---------- */
 .tag-chip {
-  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 8px; border-radius: 999px; font-size: 11px;
   background: var(--im-surface-2); border: 1px solid var(--im-border-strong);
   font-family: var(--im-mono); color: var(--im-fg);
 }
+.tag-chip .tag-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 13px; height: 13px; margin: 0 -3px 0 0; padding: 0;
+  border: 0; border-radius: 50%; background: transparent;
+  color: var(--im-fg-subtle); cursor: pointer;
+}
+.tag-chip .tag-x svg { width: 10px; height: 10px; fill: currentColor; }
+.tag-chip .tag-x:hover { color: var(--im-danger); background: var(--im-danger-soft); }
+.tag-chip .tag-x:focus-visible { outline: 2px solid var(--im-primary); outline-offset: 1px; }
 /* A protected tag says so on the chip itself: discovering it at the delete
    dialog would be too late. */
 .tag-chip.protected {

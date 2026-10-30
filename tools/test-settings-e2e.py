@@ -593,6 +593,26 @@ def main() -> int:
                                         "sourceTag": "latest", "targetTag": "v9", "deleteSource": False})
         check("adding a tag is still allowed (nothing is lost)", "error" not in r2, r2)
 
+        # Whole-image delete: one request removes every tag, but a protected
+        # tag still blocks it (the per-tag guard must not be bypassed by
+        # deleting the artifact that carries it).
+        DELETES.clear()
+        reply = sc.call("harbor/deleteArtifact", {"connectionId": CONN, "project": PROJECT,
+                                                  "repository": "tagged", "reference": TAGGED})
+        check("deleting a whole image with protected tags is refused",
+              "error" in reply and "protected" in reply["error"]["message"], reply)
+        check("...and no DELETE is sent", DELETES == [], DELETES)
+
+        sc.result("settings/set", {"connectionId": CONN, "settings": settings_payload(
+            retention={"keepTagged": 0, "protectTags": []})})
+        DELETES.clear()
+        reply = sc.call("harbor/deleteArtifact", {"connectionId": CONN, "project": PROJECT,
+                                                  "repository": "tagged", "reference": TAGGED})
+        check("with no protected tags the whole image deletes in one call", "error" not in reply, reply)
+        check("exactly one DELETE was sent", len(DELETES) == 1, DELETES)
+        check("the DELETE targets the artifact, not one tag",
+              len(DELETES) == 1 and "/artifacts/" in DELETES[0] and "/tags/" not in DELETES[0], DELETES)
+
         print("\nF2) the retention window blocks deletes, not just marks them")
         # "Keep the newest N artifacts" used to be a UI marker: the newest N were
         # labelled and nothing stopped you deleting one. Reported from use — a

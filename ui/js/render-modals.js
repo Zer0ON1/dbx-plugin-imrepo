@@ -146,8 +146,28 @@
     // Defence in depth: the button already refuses, and so does the backend.
     const pat = IM.protectedPattern(tag);
     if (pat) { IM.toast(IM.t("protected.refused") + "  [" + pat + "]", "err"); return; }
-    IM.pendingDelete = { repo, tag, reference };
+    IM.pendingDelete = { kind: "tag", repo, tag, reference };
     IM.$("#deleteMsg").textContent = `${IM.t("retag.repo")}: ${repo}  ·  ${IM.t("tag")}: ${tag}`;
+    IM.$("#deleteModal").hidden = false;
+  }
+
+  /**
+   * Deletes one image (artifact) and every tag that points at it, in one call.
+   * Harbor's per-tag delete used to leave the other tags behind, so an image
+   * with N tags needed N clicks; this is the whole-image action. The row still
+   * offers per-tag deletes through the × on each tag chip.
+   */
+  IM.openArtifactDelete = function openArtifactDelete(project, repo, artifact) {
+    const names = ((artifact && artifact.tags) || []).map((t) => t.name);
+    IM.pendingDelete = {
+      kind: "artifact", project, repo,
+      digest: artifact.digest, tags: names,
+    };
+    const tpl = names.length === 1 ? IM.t("artifact.deleteMsgOne") : IM.t("artifact.deleteMsg");
+    IM.$("#deleteMsg").textContent = tpl
+      .replace("{digest}", IM.shortDigest(artifact.digest))
+      .replace("{count}", String(names.length))
+      .replace("{tags}", names.join(", "));
     IM.$("#deleteModal").hidden = false;
   }
 

@@ -234,7 +234,13 @@
       const btn = IM.$("#btnDeleteConfirm");
       btn.disabled = true;
       try {
-        if (IM.state.mode === "harbor" && IM.pendingDelete.reference) {
+        if (IM.pendingDelete.kind === "artifact") {
+          const project = IM.pendingDelete.project || IM.state.current.project;
+          const short = IM.stripProjectPrefix(IM.pendingDelete.repo, project);
+          await IM.invoke("harbor/deleteArtifact", {
+            project, repository: short, reference: IM.pendingDelete.digest,
+          });
+        } else if (IM.state.mode === "harbor" && IM.pendingDelete.reference) {
           const project = IM.state.current.project;
           const short = IM.stripProjectPrefix(IM.pendingDelete.repo, project);
           await IM.invoke("harbor/deleteTag", { project, repository: short, reference: IM.pendingDelete.reference, tag: IM.pendingDelete.tag });
