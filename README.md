@@ -31,7 +31,7 @@ Release 里放的是**未签名候选包**（即上架用的输入，见[发布]
 Sidecar 是**静态链接**的 Go 二进制（`CGO_ENABLED=0`），不依赖目标机 libc。已在
 **麒麟 V10（aarch64）、openEuler 24.03（amd64）、Windows 11 Enterprise** 实体机上安装使用；
 CI 另在 ubuntu / windows / macos 三个真实 runner 上各自跑一遍完整测试套件（测的就是发布用的那批字节）。
-细节见 [`docs/DESIGN.md` 的平台支持一节](docs/DESIGN.md#平台支持)。
+细节见 [`docs/DESIGN.md`的平台支持一节](docs/DESIGN.md#平台支持)。
 
 ## 功能
 
@@ -55,14 +55,6 @@ CI 另在 ubuntu / windows / macos 三个真实 runner 上各自跑一遍完整�
 | 加载体验 | 展开项目后台预热前 6 个仓库；列表 60s 缓存 + 请求去重；**慢响应不会覆盖后点的仓库** |
 | **大文件传输** | 上传以 1 MiB 分块（宿主桥单请求上限 2 MiB，base64 后约 1.4 MiB），下载以 4 MiB 分块并走宿主的二进制保存通道；桌面宿主直接写入原生保存对话框选定的文件。归档临时文件放在插件数据目录的 `transfers/`，关闭对话框或完成后删除，异常退出由 24 小时清扫兜底 |
 | Harbor 自动识别 | 类型选成 Docker Registry v2 但服务器其实是 Harbor 时，探测 `/api/v2.0/ping` 自动启用 Harbor 功能 |
-
-> **Docker 语义里的 tag 只是冒号后的版本标签，完整镜像是 `<registry 主机>/<仓库路径>:<tag>`。**
-> 上传对话框会实时预览完整目标引用；目标项目/仓库固定为当前仓库，只有 Tag 可编辑。
-> **拉取地址只由目标仓库 + 目标 Tag 决定。** 归档里的源引用（例如
-> `docker.cnb.io/dbxio.com/dbx:0.60.0`）只用于预填；上传到 `hub.dibtime.com` 的项目 `dbx`、
-> 仓库 `dbx`、Tag `0.60.0_amd64` 后，拉取命令是
-> `docker pull hub.dibtime.com/dbx/dbx:0.60.0_amd64`。源 registry 的路径不会成为别名，
-> `docker.cnb.io/...` 仍然只指向原仓库里的那份镜像。
 
 ## 仓库类型支持范围
 
@@ -240,16 +232,7 @@ dbx-plugin-imrepo/
 [`catalog/index.json`](https://dl.dbxio.com/catalog/index.json)（`dl.dbxio.com` 上的包由 DBX Store
 签名，DBX 安装前会验证该签名）。
 
-发一个新版本：
-
-1. 改 `manifest.json` 的 `version`（唯一需要改的地方，见 [`docs/DESIGN.md`](docs/DESIGN.md#版本号只需改一个地方)）
-2. 推一个 `v*` tag，并**创建 GitHub Release**——CI（`.github/workflows/plugin-release.yml`）会跑全量测试
-   → 交叉编译六个平台 → 把 6 个 `.dbxp` 与汇总的 `release-candidates.json` 传到该 Release
-3. 候选元数据提交给 [t8y2/dbx-store](https://github.com/t8y2/dbx-store)（首次是手工 PR；登记
-   `autoUpdate: true` 后由同步工作流自动开 PR）
-4. 维护者审核后跑签名工作流：校验字节 → 签名 → 发布到 `dl.dbxio.com` → 更新目录条目
-
-几个约束值得记住：
+几个约束：
 
 - **`.dbxp` 不提交进 Git**（`dist/` 已忽略），只作为 Release 附件。Release 上是**未签名候选包**，
   商店分发的是签名后的副本。
