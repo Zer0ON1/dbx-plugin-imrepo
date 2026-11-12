@@ -432,6 +432,13 @@ def main() -> int:
     check("packaged manifest points at the packaged sidecar", not layout_errors, layout_errors)
     check("packaged manifest keeps the repository identity",
           manifest["id"] == json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))["id"], manifest["id"])
+    provider = next(c for c in manifest.get("contributions", []) if c.get("type") == "connection-provider")
+    region = next(f for f in provider.get("fields", []) if f.get("key") == "region")
+    region_values = {o.get("value") for o in region.get("options", [])}
+    check("cloud region is a dropdown, not free text", region.get("type") == "select", region.get("type"))
+    check("the dropdown covers AWS, Aliyun and Tencent regions",
+          {"us-east-1", "cn-hangzhou", "ap-guangzhou"} <= region_values,
+          sorted(v for v in region_values if v)[:12])
 
     srv = Server(("127.0.0.1", PORT), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()

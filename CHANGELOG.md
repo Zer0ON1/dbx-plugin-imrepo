@@ -15,6 +15,12 @@ now drops the architecture cache, entries expire on the same 60-second TTL as
 the listings, and opening the layers dialog re-reads the tag's architectures so
 the badge and the dialog agree.
 
+**Cloud regions are selected from a list.** The Region field for AWS ECR,
+Aliyun ACR and Tencent TCR is a select instead of free text; the options are
+labelled by provider (`AWS · us-east-1`, `Aliyun · cn-hangzhou`, …) and store
+the raw region ID. The list covers the current public regions; a newly launched
+region needs a plugin update.
+
 ## 1.0.1
 
 **Image archives can be uploaded and downloaded ([#4]).** A new Upload button takes a

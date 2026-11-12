@@ -265,9 +265,319 @@
         {
           "key": "region",
           "label": "Region",
-          "type": "text",
+          "type": "select",
           "binding": "config",
-          "placeholder": "ap-northeast-1 / cn-hangzhou / ap-guangzhou",
+          "default": "",
+          "options": [
+            {
+              "label": "Select a region",
+              "value": ""
+            },
+            {
+              "label": "AWS · us-east-1",
+              "value": "us-east-1"
+            },
+            {
+              "label": "AWS · us-east-2",
+              "value": "us-east-2"
+            },
+            {
+              "label": "AWS · us-west-1",
+              "value": "us-west-1"
+            },
+            {
+              "label": "AWS · us-west-2",
+              "value": "us-west-2"
+            },
+            {
+              "label": "AWS · af-south-1",
+              "value": "af-south-1"
+            },
+            {
+              "label": "AWS · ap-east-1",
+              "value": "ap-east-1"
+            },
+            {
+              "label": "AWS · ap-northeast-1",
+              "value": "ap-northeast-1"
+            },
+            {
+              "label": "AWS · ap-northeast-2",
+              "value": "ap-northeast-2"
+            },
+            {
+              "label": "AWS · ap-northeast-3",
+              "value": "ap-northeast-3"
+            },
+            {
+              "label": "AWS · ap-south-1",
+              "value": "ap-south-1"
+            },
+            {
+              "label": "AWS · ap-south-2",
+              "value": "ap-south-2"
+            },
+            {
+              "label": "AWS · ap-southeast-1",
+              "value": "ap-southeast-1"
+            },
+            {
+              "label": "AWS · ap-southeast-2",
+              "value": "ap-southeast-2"
+            },
+            {
+              "label": "AWS · ap-southeast-3",
+              "value": "ap-southeast-3"
+            },
+            {
+              "label": "AWS · ap-southeast-4",
+              "value": "ap-southeast-4"
+            },
+            {
+              "label": "AWS · ap-southeast-5",
+              "value": "ap-southeast-5"
+            },
+            {
+              "label": "AWS · ca-central-1",
+              "value": "ca-central-1"
+            },
+            {
+              "label": "AWS · ca-west-1",
+              "value": "ca-west-1"
+            },
+            {
+              "label": "AWS · eu-central-1",
+              "value": "eu-central-1"
+            },
+            {
+              "label": "AWS · eu-central-2",
+              "value": "eu-central-2"
+            },
+            {
+              "label": "AWS · eu-north-1",
+              "value": "eu-north-1"
+            },
+            {
+              "label": "AWS · eu-south-1",
+              "value": "eu-south-1"
+            },
+            {
+              "label": "AWS · eu-south-2",
+              "value": "eu-south-2"
+            },
+            {
+              "label": "AWS · eu-west-1",
+              "value": "eu-west-1"
+            },
+            {
+              "label": "AWS · eu-west-2",
+              "value": "eu-west-2"
+            },
+            {
+              "label": "AWS · eu-west-3",
+              "value": "eu-west-3"
+            },
+            {
+              "label": "AWS · il-central-1",
+              "value": "il-central-1"
+            },
+            {
+              "label": "AWS · me-central-1",
+              "value": "me-central-1"
+            },
+            {
+              "label": "AWS · me-south-1",
+              "value": "me-south-1"
+            },
+            {
+              "label": "AWS · sa-east-1",
+              "value": "sa-east-1"
+            },
+            {
+              "label": "AWS · mx-central-1",
+              "value": "mx-central-1"
+            },
+            {
+              "label": "Aliyun · cn-hangzhou",
+              "value": "cn-hangzhou"
+            },
+            {
+              "label": "Aliyun · cn-shanghai",
+              "value": "cn-shanghai"
+            },
+            {
+              "label": "Aliyun · cn-beijing",
+              "value": "cn-beijing"
+            },
+            {
+              "label": "Aliyun · cn-shenzhen",
+              "value": "cn-shenzhen"
+            },
+            {
+              "label": "Aliyun · cn-zhangjiakou",
+              "value": "cn-zhangjiakou"
+            },
+            {
+              "label": "Aliyun · cn-huhehaote",
+              "value": "cn-huhehaote"
+            },
+            {
+              "label": "Aliyun · cn-wulanchabu",
+              "value": "cn-wulanchabu"
+            },
+            {
+              "label": "Aliyun · cn-chengdu",
+              "value": "cn-chengdu"
+            },
+            {
+              "label": "Aliyun · cn-guangzhou",
+              "value": "cn-guangzhou"
+            },
+            {
+              "label": "Aliyun · cn-heyuan",
+              "value": "cn-heyuan"
+            },
+            {
+              "label": "Aliyun · cn-fuzhou",
+              "value": "cn-fuzhou"
+            },
+            {
+              "label": "Aliyun · cn-nanjing",
+              "value": "cn-nanjing"
+            },
+            {
+              "label": "Aliyun · cn-hongkong",
+              "value": "cn-hongkong"
+            },
+            {
+              "label": "Aliyun · ap-southeast-1",
+              "value": "ap-southeast-1"
+            },
+            {
+              "label": "Aliyun · ap-southeast-2",
+              "value": "ap-southeast-2"
+            },
+            {
+              "label": "Aliyun · ap-southeast-3",
+              "value": "ap-southeast-3"
+            },
+            {
+              "label": "Aliyun · ap-southeast-5",
+              "value": "ap-southeast-5"
+            },
+            {
+              "label": "Aliyun · ap-southeast-6",
+              "value": "ap-southeast-6"
+            },
+            {
+              "label": "Aliyun · ap-northeast-1",
+              "value": "ap-northeast-1"
+            },
+            {
+              "label": "Aliyun · ap-northeast-2",
+              "value": "ap-northeast-2"
+            },
+            {
+              "label": "Aliyun · us-west-1",
+              "value": "us-west-1"
+            },
+            {
+              "label": "Aliyun · us-east-1",
+              "value": "us-east-1"
+            },
+            {
+              "label": "Aliyun · eu-central-1",
+              "value": "eu-central-1"
+            },
+            {
+              "label": "Aliyun · eu-west-1",
+              "value": "eu-west-1"
+            },
+            {
+              "label": "Aliyun · me-east-1",
+              "value": "me-east-1"
+            },
+            {
+              "label": "Aliyun · me-central-1",
+              "value": "me-central-1"
+            },
+            {
+              "label": "Tencent · ap-guangzhou",
+              "value": "ap-guangzhou"
+            },
+            {
+              "label": "Tencent · ap-shanghai",
+              "value": "ap-shanghai"
+            },
+            {
+              "label": "Tencent · ap-beijing",
+              "value": "ap-beijing"
+            },
+            {
+              "label": "Tencent · ap-chengdu",
+              "value": "ap-chengdu"
+            },
+            {
+              "label": "Tencent · ap-chongqing",
+              "value": "ap-chongqing"
+            },
+            {
+              "label": "Tencent · ap-nanjing",
+              "value": "ap-nanjing"
+            },
+            {
+              "label": "Tencent · ap-hongkong",
+              "value": "ap-hongkong"
+            },
+            {
+              "label": "Tencent · ap-mumbai",
+              "value": "ap-mumbai"
+            },
+            {
+              "label": "Tencent · ap-seoul",
+              "value": "ap-seoul"
+            },
+            {
+              "label": "Tencent · ap-tokyo",
+              "value": "ap-tokyo"
+            },
+            {
+              "label": "Tencent · ap-singapore",
+              "value": "ap-singapore"
+            },
+            {
+              "label": "Tencent · ap-bangkok",
+              "value": "ap-bangkok"
+            },
+            {
+              "label": "Tencent · ap-jakarta",
+              "value": "ap-jakarta"
+            },
+            {
+              "label": "Tencent · na-siliconvalley",
+              "value": "na-siliconvalley"
+            },
+            {
+              "label": "Tencent · na-ashburn",
+              "value": "na-ashburn"
+            },
+            {
+              "label": "Tencent · na-toronto",
+              "value": "na-toronto"
+            },
+            {
+              "label": "Tencent · eu-frankfurt",
+              "value": "eu-frankfurt"
+            },
+            {
+              "label": "Tencent · eu-moscow",
+              "value": "eu-moscow"
+            },
+            {
+              "label": "Tencent · sa-saopaulo",
+              "value": "sa-saopaulo"
+            }
+          ],
           "visible_when": {
             "field": "auth_type",
             "one_of": [
