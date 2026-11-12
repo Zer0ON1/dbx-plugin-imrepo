@@ -108,6 +108,7 @@ jobs:
           python tools/test-logs-e2e.py
           python tools/test-retag-e2e.py
           python tools/test-transfer-e2e.py
+          python tools/test-ecr-e2e.py
           python tools/test-mcp-e2e.py
 
       # The same headless shell on every platform, deliberately. Falling back to

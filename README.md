@@ -53,6 +53,7 @@ CI 另在 ubuntu / windows / macos 三个真实 runner 上各自跑一遍完整�
 | 设置 | 全局（用户管理/扫描器/关于）+ 项目级（可见性、配额、成员与角色、回收策略、本项目扫描器），按连接持久化，**由后端强制执行** |
 | 快捷工具 | 拉取命令弹窗：镜像地址 / docker / nerdctl / crictl / podman / ctr / docker login，点整行即复制 |
 | 加载体验 | 展开项目后台预热前 6 个仓库；列表 60s 缓存 + 请求去重；**慢响应不会覆盖后点的仓库** |
+| **AWS 私有 ECR** | 仓库列表走 `ecr:DescribeRepositories`（ECR 不实现 `/v2/_catalog`），浏览/Tag/镜像层/上传/下载沿用标准 OCI；认证支持 IAM 用户 AK/SK（可加 Session Token）、环境变量、`~/.aws` profile、ECS 任务角色、EC2 实例角色 |
 | **大文件传输** | 上传以 1 MiB 分块（宿主桥单请求上限 2 MiB，base64 后约 1.4 MiB），下载以 4 MiB 分块并走宿主的二进制保存通道；桌面宿主直接写入原生保存对话框选定的文件。归档临时文件放在插件数据目录的 `transfers/`，关闭对话框或完成后删除，异常退出由 24 小时清扫兜底 |
 | Harbor 自动识别 | 类型选成 Docker Registry v2 但服务器其实是 Harbor 时，探测 `/api/v2.0/ping` 自动启用 Harbor 功能 |
 
@@ -187,6 +188,7 @@ Sidecar 测试跑**打包产物**（`dist/` 里对应当前平台的 `.dbxp` 内
 | `test-harbor-paging-e2e.py` | 35 | Harbor 列表分页、空列表形状、artifact 全量读取与总览扫描预算 |
 | `test-logs-e2e.py` | 17 | 操作日志的日期范围过滤与分页透传 |
 | `test-retag-e2e.py` | 17 | 重命名 Tag 的真实请求序列 |
+| `test-ecr-e2e.py` | 25 | 私有 ECR 仓库列表（DescribeRepositories）、SigV4/分页、Session Token、环境变量/共享 profile、权限错误与无凭据路径 |
 | `test-mcp-e2e.py` | 51 | MCP 工具的参数校验与绕过安全规则的拒绝路径 |
 | `check-contrast.py` / `check-i18n.py` | 全量配色对 / 393 键×2 语言 | 配色对比度门禁、翻译门禁 |
 | `check-packages.py` | 6 个目标 | 每个包二进制的格式/架构/签名与 manifest 路径是否与其平台相符 |

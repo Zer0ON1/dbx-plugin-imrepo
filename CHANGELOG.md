@@ -15,6 +15,22 @@ now drops the architecture cache, entries expire on the same 60-second TTL as
 the listings, and opening the layers dialog re-reads the tag's architectures so
 the badge and the dialog agree.
 
+**AWS private ECR repositories can be browsed.** ECR speaks OCI Distribution
+but does not implement `GET /v2/_catalog`, so the sidecar now lists repositories
+through the ECR API's `DescribeRepositories` (SigV4, paginated) and feeds the
+normal namespace tree; tags, manifests, blobs, upload and download keep using
+`/v2/`. The IAM principal needs `ecr:DescribeRepositories` in addition to the
+usual ECR pull/push permissions.
+
+**AWS credentials can come from the standard chain.** The ECR form now accepts
+an optional Session Token for temporary STS credentials. When the Access Key
+fields are empty, the sidecar resolves credentials in the AWS order: environment
+variables, a named/default shared profile (`~/.aws/credentials` / `~/.aws/config`),
+ECS task role, then EC2 instance role via IMDSv2. SSO profiles, `role_arn`
+profiles and `credential_process` are not executed; they fail with an explicit
+message. The ECR token lasts 12 hours, and temporary AWS credentials require a
+reconnect when they expire.
+
 **Cloud regions are selected from a list.** The Region field for AWS ECR,
 Aliyun ACR and Tencent TCR is a select instead of free text; the options are
 labelled by provider (`AWS · us-east-1`, `Aliyun · cn-hangzhou`, …) and store

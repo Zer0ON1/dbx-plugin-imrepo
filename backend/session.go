@@ -43,7 +43,7 @@ var (
 
 func buildSession(conn *Connection) (*Session, error) {
 	ctx := context.Background()
-	cred, err := resolveCredential(ctx, conn)
+	provider, cred, err := resolveCredential(ctx, conn)
 	if err != nil {
 		return nil, err
 	}
@@ -54,26 +54,31 @@ func buildSession(conn *Connection) (*Session, error) {
 	}
 	base := baseURL(conn)
 	hc := httpClient(conn)
+	oci := newOciClient(base, cred, hc)
+	// ECR has no /v2/_catalog; its repository list comes from the AWS API.
+	if ecr, ok := provider.(*awsEcrAuth); ok {
+		oci.catalogOverride = ecr.DescribeRepositories
+	}
 	return &Session{
 		Conn:         conn,
 		Cred:         cred,
 		BaseURL:      base,
 		RegistryType: conn.registryType(),
-		Oci:          newOciClient(base, cred, hc),
+		Oci:          oci,
 		Harbor:       newHarborClient(base, cred, hc),
 	}, nil
 }
 
-func resolveCredential(ctx context.Context, conn *Connection) (*Credential, error) {
+func resolveCredential(ctx context.Context, conn *Connection) (AuthProvider, *Credential, error) {
 	p, err := newAuthProvider(conn)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	cred, err := p.Credential(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return cred, nil
+	return p, cred, nil
 }
 
 func storeSession(s *Session) {

@@ -239,6 +239,31 @@
           }
         },
         {
+          "key": "session_token",
+          "label": "Session Token (temporary credentials)",
+          "type": "password",
+          "binding": "secret",
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "aws-ecr"
+            ]
+          }
+        },
+        {
+          "key": "aws_profile",
+          "label": "AWS profile (optional)",
+          "type": "text",
+          "binding": "config",
+          "placeholder": "default",
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "aws-ecr"
+            ]
+          }
+        },
+        {
           "key": "secret_id",
           "label": "SecretId",
           "type": "text",
@@ -674,6 +699,12 @@
             },
             "secret_access_key": {
               "label": "Secret Access Key / SecretKey"
+            },
+            "session_token": {
+              "label": "会话令牌（临时凭据）"
+            },
+            "aws_profile": {
+              "label": "AWS Profile（可选）"
             },
             "secret_id": {
               "label": "SecretId"

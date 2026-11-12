@@ -24,26 +24,29 @@ import (
 // ---------------------------------------------------------------------------
 
 type awsEcrAuth struct {
-	accessKey string
-	secretKey string
-	region    string
-	http      *http.Client
+	accessKey    string
+	secretKey    string
+	sessionToken string
+	region       string
+	http         *http.Client
 }
 
 func newAwsEcrAuth(conn *Connection) (*awsEcrAuth, error) {
-	ak := conn.configStr("access_key_id")
-	sk := conn.secretStr("secret_access_key")
-	region := conn.configStr("region")
-	if ak == "" || sk == "" || region == "" {
-		return nil, fmt.Errorf("AWS ECR requires access_key_id, secret_access_key and region")
+	creds, err := resolveAwsCredentials(conn)
+	if err != nil {
+		return nil, err
 	}
-	return &awsEcrAuth{accessKey: ak, secretKey: sk, region: region, http: httpClient(conn)}, nil
+	return &awsEcrAuth{
+		accessKey: creds.AccessKeyID, secretKey: creds.SecretAccessKey,
+		sessionToken: creds.SessionToken, region: creds.Region,
+		http: httpClient(conn),
+	}, nil
 }
 
 func (a *awsEcrAuth) Credential(ctx context.Context) (*Credential, error) {
 	body := []byte("{}")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"https://ecr."+a.region+".amazonaws.com/", bytes.NewReader(body))
+		ecrTokenEndpoint(a.region), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +59,7 @@ func (a *awsEcrAuth) Credential(ctx context.Context) (*Credential, error) {
 	req.Header.Set("x-amz-date", amzDate)
 	req.Host = req.URL.Host
 
-	if err := signV4(req, "ecr", a.region, a.accessKey, a.secretKey, amzDate, dateStamp, sha256Hex(body)); err != nil {
+	if err := signV4(req, "ecr", a.region, a.accessKey, a.secretKey, a.sessionToken, amzDate, dateStamp, sha256Hex(body)); err != nil {
 		return nil, err
 	}
 
@@ -256,12 +259,15 @@ func hmacSHA256(key, data []byte) []byte {
 	return h.Sum(nil)
 }
 
-func signV4(req *http.Request, service, region, accessKey, secretKey, amzDate, dateStamp, payloadHash string) error {
+func signV4(req *http.Request, service, region, accessKey, secretKey, sessionToken, amzDate, dateStamp, payloadHash string) error {
+	if sessionToken != "" {
+		req.Header.Set("x-amz-security-token", sessionToken)
+	}
 	headers := map[string]string{
 		"host":       req.Host,
 		"x-amz-date": amzDate,
 	}
-	for _, k := range []string{"x-amz-target", "content-type"} {
+	for _, k := range []string{"x-amz-target", "content-type", "x-amz-security-token"} {
 		if v := req.Header.Get(k); v != "" {
 			headers[k] = strings.TrimSpace(v)
 		}

@@ -85,6 +85,10 @@ type OciClient struct {
 	// several of them can share one session's client.
 	tokMu  sync.Mutex
 	anonOK bool
+	// catalogOverride replaces GET /v2/_catalog for registries that do not
+	// implement it (AWS ECR private). It returns the full repository list; the
+	// search filter below still applies.
+	catalogOverride func(context.Context) ([]string, error)
 }
 
 func (c *OciClient) tokenFor(scope string) string {
@@ -248,29 +252,39 @@ func scopeFor(repo, verb string) string {
 
 // Catalog lists repository names (supports optional search filter).
 func (c *OciClient) Catalog(ctx context.Context, search string) ([]string, error) {
-	resp, err := c.do(ctx, http.MethodGet, "/v2/_catalog?n=1000", nil, "", "registry:catalog:*")
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf("catalog not available (%d): %s", resp.StatusCode, truncate(string(data), 200))
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("catalog failed (%d): %s", resp.StatusCode, truncate(string(data), 200))
-	}
-	var out struct {
-		Repositories []string `json:"repositories"`
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, err
+	var repositories []string
+	if c.catalogOverride != nil {
+		out, err := c.catalogOverride(ctx)
+		if err != nil {
+			return nil, err
+		}
+		repositories = out
+	} else {
+		resp, err := c.do(ctx, http.MethodGet, "/v2/_catalog?n=1000", nil, "", "registry:catalog:*")
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized {
+			return nil, fmt.Errorf("catalog not available (%d): %s", resp.StatusCode, truncate(string(data), 200))
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("catalog failed (%d): %s", resp.StatusCode, truncate(string(data), 200))
+		}
+		var out struct {
+			Repositories []string `json:"repositories"`
+		}
+		if err := json.Unmarshal(data, &out); err != nil {
+			return nil, err
+		}
+		repositories = out.Repositories
 	}
 	if search == "" {
-		return out.Repositories, nil
+		return repositories, nil
 	}
 	var res []string
-	for _, r := range out.Repositories {
+	for _, r := range repositories {
 		if strings.Contains(strings.ToLower(r), strings.ToLower(search)) {
 			res = append(res, r)
 		}

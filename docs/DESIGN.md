@@ -153,6 +153,24 @@ settings 测试的 P 组会读**包内**的 `manifest.json`，断言它的 `entr
 
 完整对照表见 README 的「仓库类型支持范围」。
 
+### AWS 私有 ECR
+
+ECR 的 pull/push 是标准 OCI Distribution，但**不实现 `GET /v2/_catalog`**。因此 ECR 的仓库列表改走 AWS API：
+
+- `DescribeRepositories`（`api.ecr.<region>.amazonaws.com`）用与 `GetAuthorizationToken` 相同的 AK/SK 做 SigV4 签名，分页读取（`nextToken`，每页 1000，最多 100 页）；
+- 结果作为 v2 catalog 的 override 注入 `OciClient.Catalog`，命名空间树/仓库列表/搜索都复用原有逻辑；Tag、Manifest、Blob 仍走 `/v2/`；
+- 需要 IAM 权限 `ecr:DescribeRepositories`；连接测试本身只需要 `/v2/` 可达。
+
+凭据解析顺序（`backend/aws_credentials.go`）：
+
+1. 表单里的 Access Key ID / Secret Access Key（可带 Session Token，用于 STS 临时凭据）；
+2. `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`；
+3. 指定 profile（表单 `aws_profile` 或 `AWS_PROFILE`）或默认 profile 的 `~/.aws/credentials` / `~/.aws/config`；
+4. ECS 任务角色（`AWS_CONTAINER_CREDENTIALS_*`）；
+5. EC2 实例角色（IMDSv2）。
+
+SSO profile、`role_arn` profile 和 `credential_process` 不执行（需要 SDK 刷新流程或任意命令执行），会返回明确错误。ECR token 有效期 12 小时；临时 STS 凭据到期后需要重新连接。
+
 ### 镜像包上传 / 下载（.tar / .tar.gz）
 
 两个方向都走标准 OCI Distribution，所以对 Harbor、通用 v2、Nexus/Artifactory/Quay 与云厂商托管仓库
