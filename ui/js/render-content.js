@@ -427,6 +427,7 @@
     const tbody = IM.el("tbody");
     for (const tg of tags) {
       const tr = IM.el("tr");
+      tr.dataset.tag = tg;
       const tdTag = IM.el("td");
       tdTag.appendChild(IM.tagChip(tg));
       const archSlot = IM.el("span", "arch-badges");

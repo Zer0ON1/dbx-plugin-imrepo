@@ -4,6 +4,17 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
+## Unreleased
+
+**A tag moved to another platform now refreshes its ARCH badge.** A registry can
+move a tag to a different manifest without the tag name changing (a plain
+`docker push` over an existing tag). The tag table kept the architecture it had
+cached for that name, so it still said `arm64` while the layers dialog read
+`linux/amd64` from the new manifest. Any listing invalidation or forced refresh
+now drops the architecture cache, entries expire on the same 60-second TTL as
+the listings, and opening the layers dialog re-reads the tag's architectures so
+the badge and the dialog agree.
+
 ## 1.0.1
 
 **Image archives can be uploaded and downloaded ([#4]).** A new Upload button takes a

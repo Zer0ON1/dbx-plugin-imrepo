@@ -37,6 +37,12 @@
   IM.invalidate = function invalidate(key) {
     if (key) IM.state.cache.delete(key);
     else IM.state.cache.clear();
+    // A tag can be moved to a different manifest without its name changing
+    // (docker push over an existing tag). Architecture answers are keyed by
+    // tag, so they have to be dropped with the listings or a refresh would
+    // repaint the old platform while the layers dialog reads the new one.
+    IM.archCache.clear();
+    IM.archInflight.clear();
     // The search index is a snapshot of every project's repository listing; a
     // mutation (delete, rename, cleanup) can date it. Dropping it costs one
     // cached listing per project on the next search, and a cached listing that
@@ -132,23 +138,26 @@
    * per row would otherwise cost a HEAD per row — and this call already reads
    * the manifest, which is where the digest comes from.
    */
-  IM.loadTagArches = async function loadTagArches(repo, tag, slot, digestSlot) {
+  IM.loadTagArches = async function loadTagArches(repo, tag, slot, digestSlot, force) {
     const key = IM.archCacheKey(repo, tag);
-    let info = IM.archCache.get(key);
+    let info = force ? null : IM.archCache.get(key);
+    if (info && Date.now() - (info.at || 0) > IM.CACHE_TTL_MS) info = null;
     if (!info) {
       // Two table rows (or a re-render landing while the first read is still in
-      // flight) share one request instead of issuing two.
-      let p = IM.archInflight.get(key);
+      // flight) share one request instead of issuing two. A forced read (after
+      // the layers dialog resolved a different platform) bypasses both.
+      let p = force ? null : IM.archInflight.get(key);
       if (!p) {
         p = IM.invoke("registry/arches", { repository: repo, reference: tag })
           .then((r) => ({ arches: (r && r.arches) || [], digest: (r && r.digest) || "" }))
           .catch(() => ({ arches: [], digest: "" }))
           .then((value) => {
+            value.at = Date.now();
             IM.archCache.set(key, value);
             IM.archInflight.delete(key);
             return value;
           });
-        IM.archInflight.set(key, p);
+        if (!force) IM.archInflight.set(key, p);
       }
       info = await p;
     }

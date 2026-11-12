@@ -44,6 +44,10 @@
   // Delay registry/arches so a second render of the same repository lands while
   // the first read is still in flight (exercises the in-flight dedup).
   const slowArches = Number(params.get("slowarches") || 0);
+  // Tag-overwrite regression: the first arch answer is arm64, then a "docker
+  // push" moves the tag to amd64 and the refresh must not keep the cached badge.
+  const tagOverwrite = params.get("tagoverwrite") === "1";
+  let tagArch = "arm64";
   // The host notifies the workbench of a connection switch through the callback
   // registered in onContext; kept here so a driver can fire it.
   let ctxCb = null;
@@ -697,6 +701,11 @@
         // digest, and the tag table shows one, so the backend answers both from
         // the manifest read it was already doing.
         const ref = (p && p.reference) || "";
+        if (tagOverwrite) {
+          return { repository: (p && p.repository) || "", reference: ref,
+                   digest: "sha256:" + (tagArch === "arm64" ? "a" : "b").repeat(64),
+                   arches: [tagArch] };
+        }
         return { repository: (p && p.repository) || "", reference: ref,
                  digest: "sha256:" + ref.padEnd(8, "0") + "c0ffee".repeat(10),
                  arches: ["amd64", "arm64"] };
@@ -855,6 +864,12 @@
       }
     }
     if (false) setTimeout(() => document.getElementById("btnCards")?.click(), 800); // cards view removed in v1.5.0
+    if (tagOverwrite) {
+      setTimeout(() => {
+        tagArch = "amd64";
+        document.getElementById("btnRefresh")?.click();
+      }, 1300);
+    }
     const transferDir = params.get("transfer");
     const maskDuring = params.get("maskduring");
     if (maskDuring === "upload") {

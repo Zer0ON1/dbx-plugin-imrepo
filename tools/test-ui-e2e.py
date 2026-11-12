@@ -874,6 +874,22 @@ def main() -> int:
         check("the filtered log table still renders rows",
               "logs-pager" in dom, "pager/total missing after filtering")
 
+        print("\nS0) a tag moved to another platform refreshes its ARCH badge")
+        # Reported from use: an arm64 tag was overwritten by an amd64 image via
+        # a plain docker push; the tag still said arm64 while the layers dialog
+        # read linux/amd64. The arch cache was keyed by tag only and survived a
+        # forced refresh.
+        dom = browser.dom("theme=light&probe=1&mode=docker&tagoverwrite=1", 9000)
+        body = re.search(r'id="contentBody">(.*?)</main>', dom, re.S)
+        seg = body.group(1) if body else ""
+        arch_reqs = [r for r in probe_requests(dom) if r.startswith("registry/arches")]
+        check("refresh re-reads architectures after a tag was moved",
+              len(arch_reqs) >= 6, arch_reqs)
+        check("the refreshed badge shows the new platform",
+              re.search(r'class="arch-badge mono"[^>]*>amd64<', seg) is not None
+              and re.search(r'class="arch-badge mono"[^>]*>arm64<', seg) is None,
+              re.findall(r'arch-badge mono"[^>]*>([^<]+)<', seg))
+
         print("\nS) image archives: upload a local .tar and download a repository image")
         dom = browser.dom("theme=light&probe=1&transfer=upload", 9000)
         reqs = probe_requests(dom)

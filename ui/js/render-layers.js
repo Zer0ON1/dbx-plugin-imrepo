@@ -18,11 +18,30 @@
       const r = await IM.invoke("registry/layers", { repository: repo, reference });
       if (seq !== IM.state.layersSeq) return;
       IM.renderLayers(r);
+      // The layers read is manifest-fresh; use it as a cue to re-read the tag's
+      // architecture badges. Otherwise a tag moved to another platform could
+      // show the old badge in the table and the new platform in this dialog.
+      IM.reconcileTagArches(repo, reference);
     } catch (e) {
       if (seq !== IM.state.layersSeq) return;
       IM.$("#layersBody").innerHTML = "";
       IM.$("#layersBody").appendChild(IM.el("p", "hint warn", e.message || IM.t("failed")));
     }
+  }
+
+  /**
+   * Re-reads one tag row's architecture badges after the layers dialog proved
+   * the manifest is fresh. A digest reference has no tag row; Harbor's artifact
+   * table carries its platforms in the listing instead of this cache.
+   */
+  IM.reconcileTagArches = function reconcileTagArches(repo, tag) {
+    if (!tag || tag.indexOf("sha256:") === 0) return;
+    const row = Array.from(document.querySelectorAll("#contentBody tr"))
+      .find((tr) => tr.dataset.tag === tag);
+    if (!row) return;
+    const slot = row.querySelector(".arch-badges");
+    const digest = row.querySelector(".digest-cell");
+    if (slot) IM.loadTagArches(repo, tag, slot, digest, true);
   }
 
   /**
