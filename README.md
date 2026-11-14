@@ -18,7 +18,7 @@
 <details>
 <summary>手动安装 / 指定版本</summary>
 
-从 [Releases](https://github.com/Zer0ON1/dbx-plugin-imrepo/releases) 下载对应平台的 `.dbxp`：
+从 [Releases](https://github.com/LeavingRain/dbx-plugin-imrepo/releases) 下载对应平台的 `.dbxp`：
 `windows-x64` / `windows-arm64` / `linux-x64` / `linux-arm64` / `darwin-x64` / `darwin-arm64`，
 然后在插件中心开启**「允许安装未签名开发包」**。
 

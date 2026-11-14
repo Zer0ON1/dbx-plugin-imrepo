@@ -4,8 +4,8 @@
   "icon": "assets/plugin.svg",
   "tags": ["registry", "harbor", "oci", "docker", "containers", "devops"],
   "permissions": [],
-  "source": "https://github.com/Zer0ON1/dbx-plugin-imrepo",
-  "homepage": "https://github.com/Zer0ON1/dbx-plugin-imrepo",
+  "source": "https://github.com/LeavingRain/dbx-plugin-imrepo",
+  "homepage": "https://github.com/LeavingRain/dbx-plugin-imrepo",
   "license": "Apache-2.0",
-  "releaseNotes": "Private AWS ECR repository browsing with DescriptionRepositories and the AWS credential chain, image archive upload/download (.tar/.tar.gz), Docker Registry v2 projects, registry overview charts, and one badge per architecture."
+  "releaseNotes": "Private AWS ECR repository browsing with DescriptionRepositories and the AWS credential chain, image archive upload/download (.tar/.tar.gz), Docker Registry v2 projects, registry overview charts, and one badge per architecture. Repository moved to github.com/LeavingRain/dbx-plugin-imrepo. Security note: the last connection password / CLI secret is cached base64-encoded (encoding, not encryption) in credentials.json under the plugin data directory; prefer least-privilege robot accounts or read-only tokens and delete the file when no longer needed."
 }

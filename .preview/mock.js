@@ -270,7 +270,7 @@
       // Mirrors the backend, which now always reports the project page. A fork
       // that has not set one sends "" — the About panel renders a placeholder
       // rather than a dead link — so ?nogithub=1 keeps that branch reachable.
-      github: params.get("nogithub") ? "" : "https://github.com/Zer0ON1/dbx-plugin-imrepo",
+      github: params.get("nogithub") ? "" : "https://github.com/LeavingRain/dbx-plugin-imrepo",
       settingsPath: "/home/dev/.config/imrepo-dbx-plugin/settings.json",
     },
     "harbor/scannerInfo": {

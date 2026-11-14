@@ -4,7 +4,7 @@ Notable changes per release. Versions follow the plugin id
 `com.leavingrain.imrepo`; packages are named
 `com.leavingrain.imrepo-<version>-<target>.dbxp`.
 
-## Unreleased
+## 1.0.2
 
 **A tag moved to another platform now refreshes its ARCH badge.** A registry can
 move a tag to a different manifest without the tag name changing (a plain
@@ -36,6 +36,17 @@ Aliyun ACR and Tencent TCR is a select instead of free text; the options are
 labelled by provider (`AWS · us-east-1`, `Aliyun · cn-hangzhou`, …) and store
 the raw region ID. The list covers the current public regions; a newly launched
 region needs a plugin update.
+
+**The repository moved to `github.com/LeavingRain/dbx-plugin-imrepo`.** The
+GitHub account was renamed; the old owner redirects, and the packaged manifest,
+About panel and issue links now use the new URL.
+
+**Connection credentials are cached locally (disclosure).** The last password /
+CLI secret is kept base64-encoded in `credentials.json` under the plugin data
+directory (`DBX_PLUGIN_DATA_DIR`) or, when the host provides none, the platform
+config directory. Base64 is encoding, not encryption: any local process that can
+read the file can recover the secret. Prefer least-privilege robot accounts or
+read-only tokens, and delete the file when it is no longer needed.
 
 ## 1.0.1
 
@@ -113,7 +124,7 @@ operation filters. The range goes to Harbor as its native
 the pager's total stays exact. Audit logs are a Harbor-only feature, so this
 filter is Harbor-only too.
 
-[#4]: https://github.com/Zer0ON1/dbx-plugin-imrepo/issues/4
+[#4]: https://github.com/LeavingRain/dbx-plugin-imrepo/issues/4
 
 ## 1.0.0
 
@@ -147,7 +158,7 @@ the scan stops after 500 artifact pages (50,000 artifacts). Past the budget the
 remaining repositories still contribute their own `artifact_count` to the image
 total; the size is a floor and the pane says so.
 
-[#3]: https://github.com/Zer0ON1/dbx-plugin-imrepo/issues/3
+[#3]: https://github.com/LeavingRain/dbx-plugin-imrepo/issues/3
 
 ## 0.1.9
 
@@ -169,7 +180,7 @@ renamed or cleaned up, so the next search re-reads instead of filtering stale
 rows. It is also not built until the search input settles, so typing does not
 start one sweep over the project list per keystroke.
 
-[#2]: https://github.com/Zer0ON1/dbx-plugin-imrepo/issues/2
+[#2]: https://github.com/LeavingRain/dbx-plugin-imrepo/issues/2
 
 ## 0.1.81
 
@@ -239,7 +250,7 @@ well-formed name and the wrong thing for one that merely contains the project
 string later. Both call sites now drop a leading prefix only — which matters
 precisely because names may contain slashes.
 
-[#1]: https://github.com/Zer0ON1/dbx-plugin-imrepo/issues/1
+[#1]: https://github.com/LeavingRain/dbx-plugin-imrepo/issues/1
 
 ## 0.1.7
 

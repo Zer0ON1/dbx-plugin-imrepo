@@ -1,14 +1,14 @@
 {
   "name": "dbx-plugin-imrepo",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "IMREPO — Image Registry Studio: browse, manage and inspect OCI / Harbor container registries from a single DBX workbench.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Zer0ON1/dbx-plugin-imrepo.git"
+    "url": "git+https://github.com/LeavingRain/dbx-plugin-imrepo.git"
   },
-  "homepage": "https://github.com/Zer0ON1/dbx-plugin-imrepo",
+  "homepage": "https://github.com/LeavingRain/dbx-plugin-imrepo",
   "scripts": {
     "check:packages": "python3 tools/check-packages.py",
     "contrast": "python3 tools/check-contrast.py",
